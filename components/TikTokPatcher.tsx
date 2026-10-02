@@ -2,8 +2,19 @@
 
 import { useCallback, useMemo, useState } from "react";
 
-type Box = { offset: number; size: number; headerSize: number; type: string };
-type Patch = { offset: number; bytes: Uint8Array; label: string };
+type Box = {
+  offset: number;
+  size: number;
+  headerSize: number;
+  type: string;
+};
+
+type Patch = {
+  offset: number;
+  bytes: Uint8Array;
+  label: string;
+};
+
 type TrackInfo = {
   handler?: string;
   mdhd?: Box;
@@ -17,41 +28,82 @@ const CONTAINERS = new Set([
   "mdia",
   "minf",
   "stbl",
-  "dinf",
   "edts",
+  "dinf",
+  "mvex",
+  "moof",
+  "traf",
+  "meta",
   "udta",
 ]);
 
-function u32(view: DataView, o: number) {
-  return view.getUint32(o, false);
+function u32(view: DataView, offset: number) {
+  return view.getUint32(offset, false);
 }
 
-function u64(view: DataView, o: number): number {
-  const hi = view.getUint32(o, false);
-  const lo = view.getUint32(o + 4, false);
+function u64(view: DataView, offset: number): number {
+  const hi = view.getUint32(offset, false);
+  const lo = view.getUint32(offset + 4, false);
+
   return hi * 4294967296 + lo;
 }
 
-function putU32(view: DataView, o: number, v: number) {
-  view.setUint32(o, v >>> 0, false);
+function putU32(
+  view: DataView,
+  offset: number,
+  value: number,
+) {
+  view.setUint32(
+    offset,
+    value >>> 0,
+    false,
+  );
 }
 
-function putU64(view: DataView, o: number, v: number) {
-  const hi = Math.floor(v / 4294967296);
-  const lo = v - hi * 4294967296;
+function putU64(
+  view: DataView,
+  offset: number,
+  value: number,
+) {
+  const hi = Math.floor(
+    value / 4294967296,
+  );
 
-  view.setUint32(o, hi >>> 0, false);
-  view.setUint32(o + 4, lo >>> 0, false);
+  const lo =
+    value -
+    hi * 4294967296;
+
+  view.setUint32(
+    offset,
+    hi >>> 0,
+    false,
+  );
+
+  view.setUint32(
+    offset + 4,
+    lo >>> 0,
+    false,
+  );
 }
 
-function ascii(view: DataView, o: number, n: number) {
-  let s = "";
+function ascii(
+  view: DataView,
+  offset: number,
+  length: number,
+) {
+  let result = "";
 
-  for (let i = 0; i < n; i++) {
-    s += String.fromCharCode(view.getUint8(o + i));
+  for (
+    let i = 0;
+    i < length;
+    i++
+  ) {
+    result += String.fromCharCode(
+      view.getUint8(offset + i),
+    );
   }
 
-  return s;
+  return result;
 }
 
 async function readBox(
@@ -59,34 +111,64 @@ async function readBox(
   offset: number,
   limit: number,
 ): Promise<Box | null> {
-  if (offset + 8 > limit) return null;
+  if (offset + 8 > limit) {
+    return null;
+  }
 
-  const buf = await file
-    .slice(offset, Math.min(offset + 16, limit))
+  const buffer = await file
+    .slice(
+      offset,
+      Math.min(
+        offset + 16,
+        limit,
+      ),
+    )
     .arrayBuffer();
 
-  const view = new DataView(buf);
+  const view = new DataView(
+    buffer,
+  );
 
   let size = u32(view, 0);
-  const type = ascii(view, 4, 4);
+
+  const type = ascii(
+    view,
+    4,
+    4,
+  );
+
   let headerSize = 8;
 
   if (size === 1) {
-    if (view.byteLength < 16) return null;
-
-    const large = u64(view, 8);
-
-    if (!Number.isSafeInteger(large)) {
-      throw new Error("MP4 box is too large for this browser.");
+    if (view.byteLength < 16) {
+      return null;
     }
 
-    size = large;
+    const largeSize = u64(
+      view,
+      8,
+    );
+
+    if (
+      !Number.isSafeInteger(
+        largeSize,
+      )
+    ) {
+      throw new Error(
+        "MP4 box is too large for this browser.",
+      );
+    }
+
+    size = largeSize;
     headerSize = 16;
   } else if (size === 0) {
     size = limit - offset;
   }
 
-  if (size < headerSize || offset + size > limit) {
+  if (
+    size < headerSize ||
+    offset + size > limit
+  ) {
     return null;
   }
 
@@ -102,80 +184,140 @@ async function scanRange(
   file: File,
   start: number,
   end: number,
-  visitor: (box: Box) => Promise<void>,
+  visitor: (
+    box: Box,
+  ) => Promise<void>,
 ) {
-  let pos = start;
+  let position = start;
 
-  while (pos + 8 <= end) {
-    const box = await readBox(file, pos, end);
+  while (
+    position + 8 <= end
+  ) {
+    const box = await readBox(
+      file,
+      position,
+      end,
+    );
 
-    if (!box) break;
+    if (!box) {
+      break;
+    }
 
     await visitor(box);
 
-    if (CONTAINERS.has(box.type)) {
-      const childStart =
+    if (
+      CONTAINERS.has(box.type)
+    ) {
+      let childStart =
         box.offset +
-        box.headerSize +
-        (box.type === "meta" ? 4 : 0);
+        box.headerSize;
 
-      if (childStart < box.offset + box.size) {
+      /*
+       * meta is a FullBox, so its
+       * version/flags occupy 4 bytes
+       * before its children.
+       */
+      if (box.type === "meta") {
+        childStart += 4;
+      }
+
+      const boxEnd =
+        box.offset + box.size;
+
+      if (
+        childStart < boxEnd
+      ) {
         await scanRange(
           file,
           childStart,
-          box.offset + box.size,
+          boxEnd,
           visitor,
         );
       }
     }
 
-    pos = box.offset + box.size;
+    /*
+     * IMPORTANT:
+     * We do not scan mdat because it
+     * is not in CONTAINERS.
+     */
+    position =
+      box.offset + box.size;
   }
-}
-
-async function findMoov(file: File): Promise<Box> {
-  const box = await findTopLevel(file, "moov");
-
-  if (!box) {
-    throw new Error("Could not find an MP4 moov box.");
-  }
-
-  return box;
 }
 
 async function findTopLevel(
   file: File,
   wanted: string,
 ): Promise<Box | null> {
-  let pos = 0;
+  let position = 0;
 
-  while (pos + 8 <= file.size) {
-    const box = await readBox(file, pos, file.size);
+  while (
+    position + 8 <= file.size
+  ) {
+    const box = await readBox(
+      file,
+      position,
+      file.size,
+    );
 
-    if (!box) break;
+    if (!box) {
+      break;
+    }
 
-    if (box.type === wanted) {
+    if (
+      box.type === wanted
+    ) {
       return box;
     }
 
-    pos = box.offset + box.size;
+    position =
+      box.offset + box.size;
   }
 
   return null;
 }
 
-async function readFullBox(file: File, box: Box) {
-  const buf = await file
+async function findMoov(
+  file: File,
+): Promise<Box> {
+  const moov =
+    await findTopLevel(
+      file,
+      "moov",
+    );
+
+  if (!moov) {
+    throw new Error(
+      "Could not find an MP4 moov box.",
+    );
+  }
+
+  return moov;
+}
+
+async function readFullBox(
+  file: File,
+  box: Box,
+) {
+  const buffer = await file
     .slice(
-      box.offset + box.headerSize,
-      box.offset + box.headerSize + 4,
+      box.offset +
+        box.headerSize,
+      box.offset +
+        box.headerSize +
+        4,
     )
     .arrayBuffer();
 
-  const view = new DataView(buf);
+  const view = new DataView(
+    buffer,
+  );
 
   return {
-    version: view.getUint8(0),
+    version:
+      view.getUint8(0),
+
     flags:
       (view.getUint8(1) << 16) |
       (view.getUint8(2) << 8) |
@@ -183,64 +325,151 @@ async function readFullBox(file: File, box: Box) {
   };
 }
 
-async function readMdhd(file: File, box: Box) {
-  const { version } = await readFullBox(file, box);
+async function readMdhd(
+  file: File,
+  box: Box,
+) {
+  const { version } =
+    await readFullBox(
+      file,
+      box,
+    );
 
-  const base = box.offset + box.headerSize + 4;
-  const len = version === 1 ? 32 : 20;
+  const base =
+    box.offset +
+    box.headerSize +
+    4;
 
-  const buf = await file.slice(base, base + len).arrayBuffer();
-  const view = new DataView(buf);
+  const length =
+    version === 1
+      ? 32
+      : 20;
+
+  const buffer =
+    await file
+      .slice(
+        base,
+        base + length,
+      )
+      .arrayBuffer();
+
+  const view =
+    new DataView(buffer);
 
   if (version === 1) {
     return {
       version,
-      timescale: u32(view, 16),
-      duration: u64(view, 20),
+      timescale: u32(
+        view,
+        16,
+      ),
+      duration: u64(
+        view,
+        20,
+      ),
     };
   }
 
   return {
     version,
-    timescale: u32(view, 8),
-    duration: u32(view, 12),
+    timescale: u32(
+      view,
+      8,
+    ),
+    duration: u32(
+      view,
+      12,
+    ),
   };
 }
 
-async function readMvhd(file: File, box: Box) {
-  const { version } = await readFullBox(file, box);
+async function readMvhd(
+  file: File,
+  box: Box,
+) {
+  const { version } =
+    await readFullBox(
+      file,
+      box,
+    );
 
-  const base = box.offset + box.headerSize + 4;
-  const len = version === 1 ? 32 : 20;
+  const base =
+    box.offset +
+    box.headerSize +
+    4;
 
-  const buf = await file.slice(base, base + len).arrayBuffer();
-  const view = new DataView(buf);
+  const length =
+    version === 1
+      ? 32
+      : 20;
+
+  const buffer =
+    await file
+      .slice(
+        base,
+        base + length,
+      )
+      .arrayBuffer();
+
+  const view =
+    new DataView(buffer);
 
   if (version === 1) {
     return {
       version,
-      timescale: u32(view, 16),
-      duration: u64(view, 20),
+      timescale: u32(
+        view,
+        16,
+      ),
+      duration: u64(
+        view,
+        20,
+      ),
     };
   }
 
   return {
     version,
-    timescale: u32(view, 8),
-    duration: u32(view, 12),
+    timescale: u32(
+      view,
+      8,
+    ),
+    duration: u32(
+      view,
+      12,
+    ),
   };
 }
 
-async function readHandlerType(file: File, box: Box) {
-  // hdlr full box:
-  // version/flags, pre_defined, handler_type
-  const start = box.offset + box.headerSize + 8;
+async function readHandlerType(
+  file: File,
+  box: Box,
+) {
+  /*
+   * hdlr:
+   *
+   * version/flags = 4
+   * pre_defined  = 4
+   * handler_type = 4
+   */
+  const start =
+    box.offset +
+    box.headerSize +
+    8;
 
-  const buf = await file
-    .slice(start, start + 4)
-    .arrayBuffer();
+  const buffer =
+    await file
+      .slice(
+        start,
+        start + 4,
+      )
+      .arrayBuffer();
 
-  return ascii(new DataView(buf), 0, 4);
+  return ascii(
+    new DataView(buffer),
+    0,
+    4,
+  );
 }
 
 async function readSttsAverageFps(
@@ -248,48 +477,94 @@ async function readSttsAverageFps(
   stts: Box,
   timescale: number,
 ) {
-  const start = stts.offset + stts.headerSize + 4;
+  const start =
+    stts.offset +
+    stts.headerSize +
+    4;
 
-  const header = await file
-    .slice(start, start + 4)
-    .arrayBuffer();
+  const header =
+    await file
+      .slice(
+        start,
+        start + 4,
+      )
+      .arrayBuffer();
 
-  const count = u32(new DataView(header), 0);
+  const count =
+    u32(
+      new DataView(header),
+      0,
+    );
 
-  if (!count) return null;
+  if (!count) {
+    return null;
+  }
 
   let totalSamples = 0;
   let totalDuration = 0;
 
-  const chunkSize = 1024 * 1024;
-  const entriesBytes = count * 8;
+  const chunkSize =
+    1024 * 1024;
 
-  if (entriesBytes > Number.MAX_SAFE_INTEGER) {
+  const entriesBytes =
+    count * 8;
+
+  if (
+    !Number.isSafeInteger(
+      entriesBytes,
+    )
+  ) {
     return null;
   }
 
-  // stts is normally tiny; read in bounded chunks.
-  for (let off = 0; off < entriesBytes; off += chunkSize) {
-    const len = Math.min(
-      chunkSize,
-      entriesBytes - off,
-    );
+  for (
+    let offset = 0;
+    offset < entriesBytes;
+    offset += chunkSize
+  ) {
+    const length =
+      Math.min(
+        chunkSize,
+        entriesBytes - offset,
+      );
 
-    const buf = await file
-      .slice(
-        start + 4 + off,
-        start + 4 + off + len,
-      )
-      .arrayBuffer();
+    const buffer =
+      await file
+        .slice(
+          start + 4 + offset,
+          start +
+            4 +
+            offset +
+            length,
+        )
+        .arrayBuffer();
 
-    const view = new DataView(buf);
+    const view =
+      new DataView(buffer);
 
-    for (let p = 0; p + 8 <= len; p += 8) {
-      const sampleCount = u32(view, p);
-      const sampleDelta = u32(view, p + 4);
+    for (
+      let position = 0;
+      position + 8 <= length;
+      position += 8
+    ) {
+      const sampleCount =
+        u32(
+          view,
+          position,
+        );
 
-      totalSamples += sampleCount;
-      totalDuration += sampleDelta * sampleCount;
+      const sampleDelta =
+        u32(
+          view,
+          position + 4,
+        );
+
+      totalSamples +=
+        sampleCount;
+
+      totalDuration +=
+        sampleDelta *
+        sampleCount;
     }
   }
 
@@ -302,86 +577,338 @@ async function readSttsAverageFps(
   }
 
   return (
-    (totalSamples * timescale) /
+    (totalSamples *
+      timescale) /
     totalDuration
   );
 }
 
-async function buildPatch(
+/*
+ * This is the important part.
+ *
+ * The original working PowerShell patcher
+ * patches EVERY mvhd and EVERY mdhd it
+ * encounters.
+ *
+ * It does NOT:
+ *
+ * - patch tkhd
+ * - patch elst
+ * - patch only the video mdhd
+ *
+ * This function mirrors that behavior.
+ */
+async function patchTimingBox(
+  file: File,
+  box: Box,
+  divider: number,
+): Promise<Patch | null> {
+  if (
+    box.type !== "mvhd" &&
+    box.type !== "mdhd"
+  ) {
+    return null;
+  }
+
+  const bytes =
+    new Uint8Array(
+      await file
+        .slice(
+          box.offset,
+          box.offset + box.size,
+        )
+        .arrayBuffer(),
+    );
+
+  const view =
+    new DataView(
+      bytes.buffer,
+    );
+
+  /*
+   * FullBox:
+   * version = first byte
+   * flags   = next 3 bytes
+   */
+  const version =
+    view.getUint8(
+      box.headerSize,
+    );
+
+  const base =
+    box.headerSize + 4;
+
+  if (version === 0) {
+    /*
+     * version/flags = 4
+     * creation     = 4
+     * modification = 4
+     * timescale    = 4
+     * duration     = 4
+     *
+     * Relative to box start:
+     *
+     * timescale = +20
+     * duration  = +24
+     */
+
+    const timescaleOffset =
+      base + 12;
+
+    const durationOffset =
+      base + 16;
+
+    const oldTimescale =
+      u32(
+        view,
+        timescaleOffset,
+      );
+
+    const oldDuration =
+      u32(
+        view,
+        durationOffset,
+      );
+
+    const newTimescale =
+      Math.max(
+        1,
+        Math.floor(
+          oldTimescale /
+            divider,
+        ),
+      );
+
+    const newDuration =
+      Math.floor(
+        oldDuration /
+          divider,
+      );
+
+    putU32(
+      view,
+      timescaleOffset,
+      newTimescale,
+    );
+
+    putU32(
+      view,
+      durationOffset,
+      newDuration,
+    );
+  } else if (
+    version === 1
+  ) {
+    /*
+     * version/flags = 4
+     * creation     = 8
+     * modification = 8
+     * timescale    = 4
+     * duration     = 8
+     *
+     * Relative to box start:
+     *
+     * timescale = +28
+     * duration  = +32
+     */
+
+    const timescaleOffset =
+      base + 24;
+
+    const durationOffset =
+      base + 28;
+
+    const oldTimescale =
+      u32(
+        view,
+        timescaleOffset,
+      );
+
+    const oldDuration =
+      u64(
+        view,
+        durationOffset,
+      );
+
+    const newTimescale =
+      Math.max(
+        1,
+        Math.floor(
+          oldTimescale /
+            divider,
+        ),
+      );
+
+    const newDuration =
+      Math.floor(
+        oldDuration /
+          divider,
+      );
+
+    putU32(
+      view,
+      timescaleOffset,
+      newTimescale,
+    );
+
+    putU64(
+      view,
+      durationOffset,
+      newDuration,
+    );
+  } else {
+    return null;
+  }
+
+  return {
+    offset: box.offset,
+    bytes,
+    label: box.type,
+  };
+}
+
+async function inspectAndBuildPatch(
   file: File,
   divider: number,
 ) {
-  const moov = await findMoov(file);
+  const moov =
+    await findMoov(file);
 
-  let mvhd: Box | undefined;
+  let mvhd:
+    Box | undefined;
+
+  const allMdhd: Box[] = [];
+
+  /*
+   * These are only used to determine
+   * the source FPS for the UI and to
+   * match the BAT's 60/120 behavior.
+   */
   const tracks: TrackInfo[] = [];
 
-  // First pass:
-  // identify mvhd and each track's
-  // mdhd / handler / stts.
-  let currentTrack: TrackInfo | null = null;
+  let currentTrack:
+    TrackInfo | null = null;
 
   await scanRange(
     file,
-    moov.offset + moov.headerSize,
-    moov.offset + moov.size,
+    moov.offset +
+      moov.headerSize,
+    moov.offset +
+      moov.size,
     async (box) => {
-      if (box.type === "mvhd") {
+      if (
+        box.type === "mvhd"
+      ) {
         mvhd = box;
       }
 
-      if (box.type === "trak") {
+      /*
+       * IMPORTANT:
+       *
+       * Every mdhd is collected.
+       *
+       * We do NOT restrict this
+       * to the video track.
+       */
+      if (
+        box.type === "mdhd"
+      ) {
+        allMdhd.push(box);
+
+        if (
+          currentTrack
+        ) {
+          currentTrack.mdhd =
+            box;
+
+          const md =
+            await readMdhd(
+              file,
+              box,
+            );
+
+          currentTrack.timescale =
+            md.timescale;
+        }
+      }
+
+      if (
+        box.type === "trak"
+      ) {
         currentTrack = {};
-        tracks.push(currentTrack);
+        tracks.push(
+          currentTrack,
+        );
       }
 
-      if (currentTrack && box.type === "mdhd") {
-        currentTrack.mdhd = box;
-
-        const md = await readMdhd(file, box);
-        currentTrack.timescale = md.timescale;
-      }
-
-      if (currentTrack && box.type === "hdlr") {
+      if (
+        currentTrack &&
+        box.type === "hdlr"
+      ) {
         currentTrack.handler =
-          await readHandlerType(file, box);
+          await readHandlerType(
+            file,
+            box,
+          );
       }
 
-      if (currentTrack && box.type === "stts") {
-        currentTrack.stts = box;
+      if (
+        currentTrack &&
+        box.type === "stts"
+      ) {
+        currentTrack.stts =
+          box;
       }
     },
   );
 
   if (!mvhd) {
-    throw new Error("Could not find mvhd.");
-  }
-
-  const mv = await readMvhd(file, mvhd);
-
-  const video = tracks.find(
-    (t) =>
-      t.handler === "vide" &&
-      t.mdhd &&
-      t.stts,
-  );
-
-  if (
-    !video ||
-    !video.mdhd ||
-    !video.timescale ||
-    !video.stts
-  ) {
     throw new Error(
-      "Could not identify the video track / frame timing.",
+      "Could not find mvhd.",
     );
   }
 
-  const fps = await readSttsAverageFps(
-    file,
-    video.stts,
-    video.timescale,
-  );
+  if (
+    allMdhd.length === 0
+  ) {
+    throw new Error(
+      "Could not find any mdhd timing boxes.",
+    );
+  }
+
+  /*
+   * Find the video track solely for
+   * FPS detection.
+   *
+   * It is NOT used to decide which
+   * mdhd boxes get patched.
+   */
+  const videoTrack =
+    tracks.find(
+      (track) =>
+        track.handler ===
+          "vide" &&
+        track.mdhd &&
+        track.stts &&
+        track.timescale,
+    );
+
+  if (
+    !videoTrack ||
+    !videoTrack.stts ||
+    !videoTrack.timescale
+  ) {
+    throw new Error(
+      "Could not determine the video FPS.",
+    );
+  }
+
+  const fps =
+    await readSttsAverageFps(
+      file,
+      videoTrack.stts,
+      videoTrack.timescale,
+    );
 
   if (!fps) {
     throw new Error(
@@ -390,9 +917,15 @@ async function buildPatch(
   }
 
   const expected =
-    divider === 4 ? 120 : 60;
+    divider === 4
+      ? 120
+      : 60;
 
-  if (Math.abs(fps - expected) > 5) {
+  if (
+    Math.abs(
+      fps - expected,
+    ) > 5
+  ) {
     throw new Error(
       `Detected approximately ${fps.toFixed(
         3,
@@ -400,148 +933,85 @@ async function buildPatch(
     );
   }
 
-  const patches: Patch[] = [];
+  const patches: Patch[] =
+    [];
 
-  // Read and modify only the small mvhd box.
-  const mvBytes = new Uint8Array(
-    await file
-      .slice(
-        mvhd.offset,
-        mvhd.offset + mvhd.size,
-      )
-      .arrayBuffer(),
-  );
-
-  const mvView = new DataView(
-    mvBytes.buffer,
-  );
-
-  const mvBase =
-    mvhd.headerSize + 4;
-
-  const mvTs =
-    mv.version === 1
-      ? mvBase + 16
-      : mvBase + 8;
-
-  const mvDur =
-    mv.version === 1
-      ? mvBase + 20
-      : mvBase + 12;
-
-  const newMvTs = Math.max(
-    1,
-    Math.floor(mv.timescale / divider),
-  );
-
-  const newMvDur = Math.max(
-    1,
-    Math.floor(mv.duration / divider),
-  );
-
-  putU32(
-    mvView,
-    mvTs,
-    newMvTs,
-  );
-
-  if (mv.version === 1) {
-    putU64(
-      mvView,
-      mvDur,
-      newMvDur,
+  /*
+   * Patch mvhd.
+   */
+  const mvPatch =
+    await patchTimingBox(
+      file,
+      mvhd,
+      divider,
     );
-  } else {
-    putU32(
-      mvView,
-      mvDur,
-      newMvDur,
+
+  if (mvPatch) {
+    patches.push(
+      mvPatch,
     );
   }
 
-  patches.push({
-    offset: mvhd.offset,
-    bytes: mvBytes,
-    label: "mvhd",
-  });
+  /*
+   * Patch EVERY mdhd.
+   *
+   * This is the critical difference
+   * from the previous web version.
+   */
+  for (
+    const mdhd of allMdhd
+  ) {
+    const patch =
+      await patchTimingBox(
+        file,
+        mdhd,
+        divider,
+      );
 
-  const md = await readMdhd(
-    file,
-    video.mdhd,
-  );
-
-  const mdBytes = new Uint8Array(
-    await file
-      .slice(
-        video.mdhd.offset,
-        video.mdhd.offset +
-          video.mdhd.size,
-      )
-      .arrayBuffer(),
-  );
-
-  const mdView = new DataView(
-    mdBytes.buffer,
-  );
-
-  const mdBase =
-    video.mdhd.headerSize + 4;
-
-  const mdTs =
-    md.version === 1
-      ? mdBase + 16
-      : mdBase + 8;
-
-  const mdDur =
-    md.version === 1
-      ? mdBase + 20
-      : mdBase + 12;
-
-  const newMdTs = Math.max(
-    1,
-    Math.floor(md.timescale / divider),
-  );
-
-  const newMdDur = Math.max(
-    1,
-    Math.floor(md.duration / divider),
-  );
-
-  putU32(
-    mdView,
-    mdTs,
-    newMdTs,
-  );
-
-  if (md.version === 1) {
-    putU64(
-      mdView,
-      mdDur,
-      newMdDur,
-    );
-  } else {
-    putU32(
-      mdView,
-      mdDur,
-      newMdDur,
-    );
+    if (patch) {
+      patches.push(
+        patch,
+      );
+    }
   }
-
-  patches.push({
-    offset: video.mdhd.offset,
-    bytes: mdBytes,
-    label: "mdhd",
-  });
 
   patches.sort(
-    (a, b) => a.offset - b.offset,
+    (a, b) =>
+      a.offset - b.offset,
   );
 
+  /*
+   * Read original mvhd timing
+   * for display purposes.
+   */
+  const mv =
+    await readMvhd(
+      file,
+      mvhd,
+    );
+
   const originalDuration =
-    mv.duration / mv.timescale;
+    mv.duration /
+    mv.timescale;
+
+  const newMvTimescale =
+    Math.max(
+      1,
+      Math.floor(
+        mv.timescale /
+          divider,
+      ),
+    );
+
+  const newMvDuration =
+    Math.floor(
+      mv.duration /
+        divider,
+    );
 
   const outputDuration =
-    newMvDur / newMvTs;
+    newMvDuration /
+    newMvTimescale;
 
   return {
     patches,
@@ -549,6 +1019,8 @@ async function buildPatch(
     originalDuration,
     outputDuration,
     divider,
+    mdhdCount:
+      allMdhd.length,
   };
 }
 
@@ -558,87 +1030,123 @@ async function saveWithFileSystemAccess(
   name: string,
 ) {
   const picker = (
-    window as any
+    window as Window & {
+      showSaveFilePicker?: (
+        options?: unknown,
+      ) => Promise<any>;
+    }
   ).showSaveFilePicker;
 
   if (!picker) {
     return false;
   }
 
-  const handle = await picker({
-    suggestedName: name,
-    types: [
-      {
-        description: "MP4 video",
-        accept: {
-          "video/mp4": [".mp4"],
+  const handle =
+    await picker({
+      suggestedName: name,
+
+      types: [
+        {
+          description:
+            "MP4 video",
+
+          accept: {
+            "video/mp4": [
+              ".mp4",
+            ],
+          },
         },
-      },
-    ],
-  });
+      ],
+    });
 
   const writable =
     await handle.createWritable();
 
-  let sourcePos = 0;
+  let sourcePosition = 0;
 
-  const CHUNK =
+  const CHUNK_SIZE =
     32 * 1024 * 1024;
 
   try {
-    for (const patch of patches) {
+    for (
+      const patch of patches
+    ) {
       while (
-        sourcePos < patch.offset
+        sourcePosition <
+        patch.offset
       ) {
-        const end = Math.min(
-          patch.offset,
-          sourcePos + CHUNK,
-        );
+        const end =
+          Math.min(
+            patch.offset,
+            sourcePosition +
+              CHUNK_SIZE,
+          );
+
+        const chunk =
+          await file
+            .slice(
+              sourcePosition,
+              end,
+            )
+            .arrayBuffer();
 
         await writable.write(
-          await file
-            .slice(sourcePos, end)
-            .arrayBuffer(),
+          chunk,
         );
 
-        sourcePos = end;
+        sourcePosition =
+          end;
       }
 
+      /*
+       * Write the replacement
+       * metadata box.
+       */
       await writable.write(
         patch.bytes,
       );
 
-      sourcePos =
+      sourcePosition =
         patch.offset +
         patch.bytes.byteLength;
     }
 
     while (
-      sourcePos < file.size
+      sourcePosition <
+      file.size
     ) {
-      const end = Math.min(
-        file.size,
-        sourcePos + CHUNK,
-      );
+      const end =
+        Math.min(
+          file.size,
+          sourcePosition +
+            CHUNK_SIZE,
+        );
+
+      const chunk =
+        await file
+          .slice(
+            sourcePosition,
+            end,
+          )
+          .arrayBuffer();
 
       await writable.write(
-        await file
-          .slice(sourcePos, end)
-          .arrayBuffer(),
+        chunk,
       );
 
-      sourcePos = end;
+      sourcePosition =
+        end;
     }
 
     await writable.close();
 
     return true;
-  } catch (e) {
+  } catch (error) {
     try {
       await writable.abort();
     } catch {}
 
-    throw e;
+    throw error;
   }
 }
 
@@ -646,78 +1154,107 @@ function makeBlob(
   file: File,
   patches: Patch[],
 ) {
-  const parts: BlobPart[] = [];
-  let pos = 0;
+  const parts: BlobPart[] =
+    [];
 
-  for (const patch of patches) {
-    if (pos < patch.offset) {
+  let position = 0;
+
+  for (
+    const patch of patches
+  ) {
+    if (
+      position <
+      patch.offset
+    ) {
       parts.push(
         file.slice(
-          pos,
+          position,
           patch.offset,
         ),
       );
     }
 
     /*
-     * Convert the Uint8Array into a plain
-     * ArrayBuffer so newer TypeScript /
-     * DOM typings accept it as a BlobPart.
+     * Convert the Uint8Array into
+     * a standalone ArrayBuffer.
+     *
+     * This also fixes the TypeScript
+     * BlobPart error from GitHub Actions.
      */
-    const bytes = new Uint8Array(
-      patch.bytes,
-    );
+    const bytes =
+      new Uint8Array(
+        patch.bytes,
+      );
 
     const buffer =
       new ArrayBuffer(
         bytes.byteLength,
       );
 
-    new Uint8Array(buffer).set(
-      bytes,
-    );
+    new Uint8Array(
+      buffer,
+    ).set(bytes);
 
     parts.push(buffer);
 
-    pos =
+    position =
       patch.offset +
       patch.bytes.byteLength;
   }
 
-  if (pos < file.size) {
+  if (
+    position <
+    file.size
+  ) {
     parts.push(
-      file.slice(pos),
+      file.slice(
+        position,
+      ),
     );
   }
 
-  return new Blob(parts, {
-    type: "video/mp4",
-  });
+  return new Blob(
+    parts,
+    {
+      type: "video/mp4",
+    },
+  );
 }
 
 export default function TikTokPatcher() {
   const [file, setFile] =
-    useState<File | null>(null);
+    useState<File | null>(
+      null,
+    );
 
   const [fps, setFps] =
-    useState<number | null>(null);
+    useState<number | null>(
+      null,
+    );
 
   const [duration, setDuration] =
-    useState<number | null>(null);
+    useState<number | null>(
+      null,
+    );
+
+  const [mdhdCount, setMdhdCount] =
+    useState<number | null>(
+      null,
+    );
 
   const [status, setStatus] =
     useState(
       "Drop a 60 or 120 FPS MP4 to begin.",
     );
 
+  const [error, setError] =
+    useState("");
+
   const [busy, setBusy] =
     useState(false);
 
   const [dragging, setDragging] =
     useState(false);
-
-  const [error, setError] =
-    useState("");
 
   const supportsDirectSave =
     useMemo(
@@ -730,60 +1267,91 @@ export default function TikTokPatcher() {
     );
 
   const inspect = useCallback(
-    async (selected: File) => {
-      setError("");
-      setFile(selected);
+    async (
+      selectedFile: File,
+    ) => {
+      setFile(
+        selectedFile,
+      );
+
       setFps(null);
       setDuration(null);
+      setMdhdCount(null);
+      setError("");
 
       setStatus(
         "Reading MP4 timing metadata…",
       );
 
       try {
-        const probe =
-          await buildPatch(
-            selected,
+        /*
+         * Match the BAT:
+         *
+         * 120 FPS -> divider 4
+         */
+        const result =
+          await inspectAndBuildPatch(
+            selectedFile,
             4,
           );
 
-        setFps(probe.fps);
+        setFps(
+          result.fps,
+        );
+
         setDuration(
-          probe.originalDuration,
+          result.originalDuration,
+        );
+
+        setMdhdCount(
+          result.mdhdCount,
         );
 
         setStatus(
-          `Detected ${probe.fps.toFixed(
+          `Detected ${result.fps.toFixed(
             2,
           )} FPS • ${formatDuration(
-            probe.originalDuration,
-          )} • ready to patch.`,
+            result.originalDuration,
+          )} • ${result.mdhdCount} mdhd boxes found • ready to patch.`,
         );
-      } catch (e) {
-        // If 120 fails, try 60.
+      } catch {
+        /*
+         * If it wasn't 120 FPS,
+         * try the BAT's 60 FPS path.
+         */
         try {
-          const probe =
-            await buildPatch(
-              selected,
+          const result =
+            await inspectAndBuildPatch(
+              selectedFile,
               2,
             );
 
-          setFps(probe.fps);
+          setFps(
+            result.fps,
+          );
+
           setDuration(
-            probe.originalDuration,
+            result.originalDuration,
+          );
+
+          setMdhdCount(
+            result.mdhdCount,
           );
 
           setStatus(
-            `Detected ${probe.fps.toFixed(
+            `Detected ${result.fps.toFixed(
               2,
             )} FPS • ${formatDuration(
-              probe.originalDuration,
-            )} • ready to patch.`,
+              result.originalDuration,
+            )} • ${result.mdhdCount} mdhd boxes found • ready to patch.`,
           );
-        } catch {
+        } catch (
+          secondError
+        ) {
           setError(
-            e instanceof Error
-              ? e.message
+            secondError instanceof
+              Error
+              ? secondError.message
               : "Could not inspect this MP4.",
           );
 
@@ -797,88 +1365,128 @@ export default function TikTokPatcher() {
   );
 
   async function patch() {
-    if (!file || !fps) {
+    if (
+      !file ||
+      fps === null
+    ) {
       return;
     }
 
     setBusy(true);
     setError("");
-    setStatus(
-      "Preparing patch…",
-    );
 
     try {
+      /*
+       * Match the BAT exactly:
+       *
+       * ~120 FPS -> 4
+       * ~60 FPS  -> 2
+       */
       const divider =
-        Math.abs(fps - 120) < 5
+        Math.abs(
+          fps - 120,
+        ) < 0.5
           ? 4
-          : 2;
+          : Math.abs(
+                fps - 60,
+              ) < 0.5
+            ? 2
+            : 0;
+
+      if (divider === 0) {
+        throw new Error(
+          "This patcher supports 60 or 120 FPS.",
+        );
+      }
+
+      setStatus(
+        `Patching mvhd + all mdhd boxes with divider ${divider}…`,
+      );
 
       const result =
-        await buildPatch(
+        await inspectAndBuildPatch(
           file,
           divider,
         );
 
-      const base =
+      const baseName =
         file.name.replace(
           /\.mp4$/i,
           "",
         );
 
-      const name = `${base}_metadata_output.mp4`;
+      const outputName =
+        `${baseName}_metadata_output.mp4`;
 
-      if (supportsDirectSave) {
+      if (
+        supportsDirectSave
+      ) {
         setStatus(
-          "Writing patched MP4 directly to disk…",
+          `Writing ${result.patches.length} timing patches directly to disk…`,
         );
 
         await saveWithFileSystemAccess(
           file,
           result.patches,
-          name,
+          outputName,
         );
       } else {
         setStatus(
           "Preparing browser download…",
         );
 
-        const blob = makeBlob(
-          file,
-          result.patches,
-        );
+        const blob =
+          makeBlob(
+            file,
+            result.patches,
+          );
 
         const url =
           URL.createObjectURL(
             blob,
           );
 
-        const a =
+        const anchor =
           document.createElement(
             "a",
           );
 
-        a.href = url;
-        a.download = name;
-        a.click();
+        anchor.href =
+          url;
+
+        anchor.download =
+          outputName;
+
+        document.body.appendChild(
+          anchor,
+        );
+
+        anchor.click();
+
+        anchor.remove();
 
         setTimeout(
-          () =>
+          () => {
             URL.revokeObjectURL(
               url,
-            ),
+            );
+          },
           60000,
         );
       }
 
       setStatus(
-        `Done • ${formatDuration(
+        `Done • ${result.patches.length} timing boxes patched • duration ${formatDuration(
           result.outputDuration,
-        )} duration preserved.`,
+        )}.`,
       );
-    } catch (e) {
+    } catch (
+      patchError
+    ) {
       setError(
-        e instanceof Error
-          ? e.message
+        patchError instanceof
+          Error
+          ? patchError.message
           : "Patch failed.",
       );
 
@@ -903,27 +1511,31 @@ export default function TikTokPatcher() {
           </h1>
 
           <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-            Patch the working 60/120 FPS timing signal locally in your browser. Your video is never uploaded.
+            Patch the same MP4 timing metadata as the working desktop version. Your video stays local in the browser.
           </p>
         </div>
 
         <div
-          onDragOver={(e) => {
-            e.preventDefault();
+          onDragOver={(event) => {
+            event.preventDefault();
             setDragging(true);
           }}
-          onDragLeave={() =>
-            setDragging(false)
-          }
-          onDrop={(e) => {
-            e.preventDefault();
+          onDragLeave={() => {
+            setDragging(false);
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
             setDragging(false);
 
-            const dropped =
-              e.dataTransfer.files?.[0];
+            const droppedFile =
+              event.dataTransfer.files?.[0];
 
-            if (dropped) {
-              void inspect(dropped);
+            if (
+              droppedFile
+            ) {
+              void inspect(
+                droppedFile,
+              );
             }
           }}
           className={`rounded-2xl border p-8 transition-all md:p-12 ${
@@ -933,7 +1545,7 @@ export default function TikTokPatcher() {
           }`}
         >
           <div className="flex flex-col items-center text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted text-xl">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted text-xs font-bold">
               MP4
             </div>
 
@@ -942,7 +1554,7 @@ export default function TikTokPatcher() {
             </h2>
 
             <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              Large files are handled without loading the entire video into memory. Chrome/Edge can write the output directly to disk.
+              No re-encoding. Only MP4 timing metadata is changed.
             </p>
 
             <label className="mt-6 cursor-pointer rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-85">
@@ -952,11 +1564,15 @@ export default function TikTokPatcher() {
                 type="file"
                 accept="video/mp4,.mp4"
                 className="hidden"
-                onChange={(e) => {
+                onChange={(
+                  event,
+                ) => {
                   const selected =
-                    e.target.files?.[0];
+                    event.target.files?.[0];
 
-                  if (selected) {
+                  if (
+                    selected
+                  ) {
                     void inspect(
                       selected,
                     );
@@ -983,7 +1599,7 @@ export default function TikTokPatcher() {
               </div>
 
               <div className="text-sm text-muted-foreground">
-                {fps
+                {fps !== null
                   ? `${fps.toFixed(
                       2,
                     )} FPS`
@@ -993,6 +1609,10 @@ export default function TikTokPatcher() {
                   ? ` • ${formatDuration(
                       duration,
                     )}`
+                  : ""}
+
+                {mdhdCount !== null
+                  ? ` • ${mdhdCount} mdhd`
                   : ""}
               </div>
             </div>
@@ -1021,13 +1641,14 @@ export default function TikTokPatcher() {
               </p>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                {error || status}
+                {error ||
+                  status}
               </p>
             </div>
           </div>
 
           {file &&
-            fps &&
+            fps !== null &&
             !busy &&
             !error && (
               <button
@@ -1045,38 +1666,43 @@ export default function TikTokPatcher() {
         </div>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          {[
-            [
-              "Local",
-              "The video stays in your browser.",
-            ],
-            [
-              "No re-encode",
-              "Only MP4 timing metadata is changed.",
-            ],
-            [
-              "Large-file ready",
-              "Uses chunked disk writes where supported.",
-            ],
-          ].map(
-            ([title, text]) => (
-              <div
-                key={title}
-                className="rounded-xl border border-border p-4"
-              >
-                <p className="text-sm font-semibold">
-                  {title}
-                </p>
+          <InfoCard
+            title="Local"
+            text="The video stays in your browser."
+          />
 
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {text}
-                </p>
-              </div>
-            ),
-          )}
+          <InfoCard
+            title="No re-encode"
+            text="Only MP4 timing metadata is changed."
+          />
+
+          <InfoCard
+            title="Working method"
+            text="Patches mvhd and every mdhd box, without tkhd or elst changes."
+          />
         </div>
       </div>
     </main>
+  );
+}
+
+function InfoCard({
+  title,
+  text,
+}: {
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <p className="text-sm font-semibold">
+        {title}
+      </p>
+
+      <p className="mt-1 text-sm text-muted-foreground">
+        {text}
+      </p>
+    </div>
   );
 }
 
@@ -1092,51 +1718,66 @@ function formatBytes(
   ];
 
   let value = bytes;
-  let i = 0;
+  let index = 0;
 
   while (
     value >= 1024 &&
-    i < units.length - 1
+    index <
+      units.length - 1
   ) {
     value /= 1024;
-    i++;
+    index++;
   }
 
   return `${value.toFixed(
-    value >= 100 || i === 0
+    value >= 100 ||
+      index === 0
       ? 0
       : 2,
-  )} ${units[i]}`;
+  )} ${units[index]}`;
 }
 
 function formatDuration(
   seconds: number,
 ) {
-  const s = Math.max(
-    0,
-    Math.round(seconds),
-  );
+  const totalSeconds =
+    Math.max(
+      0,
+      Math.round(seconds),
+    );
 
-  const h = Math.floor(
-    s / 3600,
-  );
+  const hours =
+    Math.floor(
+      totalSeconds / 3600,
+    );
 
-  const m = Math.floor(
-    (s % 3600) / 60,
-  );
+  const minutes =
+    Math.floor(
+      (totalSeconds % 3600) /
+        60,
+    );
 
-  const sec = s % 60;
+  const remainingSeconds =
+    totalSeconds % 60;
 
-  return h
-    ? `${h}:${String(m).padStart(
-        2,
-        "0",
-      )}:${String(sec).padStart(
-        2,
-        "0",
-      )}`
-    : `${m}:${String(sec).padStart(
-        2,
-        "0",
-      )}`;
+  if (hours) {
+    return `${hours}:${String(
+      minutes,
+    ).padStart(
+      2,
+      "0",
+    )}:${String(
+      remainingSeconds,
+    ).padStart(
+      2,
+      "0",
+    )}`;
+  }
+
+  return `${minutes}:${String(
+    remainingSeconds,
+  ).padStart(
+    2,
+    "0",
+  )}`;
 }
