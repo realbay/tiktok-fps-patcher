@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
-import AnnouncementBanner from "@/components/AnnouncementBanner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,32 +13,45 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TikTok Metadata Patcher",
-  description: "Client-side MP4 metadata patcher for TikTok timing experiments.",
+  title: "TikTok FPS Patcher",
+  description: "Patch MP4 timing metadata locally without re-encoding.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable}`}
     >
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}})();`,
+            __html: `
+              (function () {
+                try {
+                  var theme = localStorage.getItem("theme");
+
+                  if (
+                    theme === "dark" ||
+                    (!theme &&
+                      window.matchMedia &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches)
+                  ) {
+                    document.documentElement.classList.add("dark");
+                  }
+                } catch (e) {}
+              })();
+            `,
           }}
         />
       </head>
-      <body className="flex min-h-full flex-col bg-background text-foreground">
-        <div className="sticky top-0 z-50">
-          <AnnouncementBanner />
-          <Header />
-        </div>
-        <div className="flex-1">{children}</div>
-        <Footer />
-      </body>
+
+      <body>{children}</body>
     </html>
   );
 }
