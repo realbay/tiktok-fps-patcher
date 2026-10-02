@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 type Box = {
   offset: number;
@@ -54,7 +54,6 @@ function putU32(view: DataView, offset: number, value: number) {
 
 function putU64(view: DataView, offset: number, value: number) {
   const hi = Math.floor(value / 4294967296);
-
   const lo = value - hi * 4294967296;
 
   view.setUint32(offset, hi >>> 0, false);
@@ -111,7 +110,10 @@ async function readBox(
     size = limit - offset;
   }
 
-  if (size < headerSize || offset + size > limit) {
+  if (
+    size < headerSize ||
+    offset + size > limit
+  ) {
     return null;
   }
 
@@ -141,20 +143,28 @@ async function scanRange(
     await visitor(box);
 
     if (CONTAINERS.has(box.type)) {
-      let childStart = box.offset + box.headerSize;
+      let childStart =
+        box.offset + box.headerSize;
 
       if (box.type === "meta") {
         childStart += 4;
       }
 
-      const boxEnd = box.offset + box.size;
+      const boxEnd =
+        box.offset + box.size;
 
       if (childStart < boxEnd) {
-        await scanRange(file, childStart, boxEnd, visitor);
+        await scanRange(
+          file,
+          childStart,
+          boxEnd,
+          visitor,
+        );
       }
     }
 
-    position = box.offset + box.size;
+    position =
+      box.offset + box.size;
   }
 }
 
@@ -165,7 +175,11 @@ async function findTopLevel(
   let position = 0;
 
   while (position + 8 <= file.size) {
-    const box = await readBox(file, position, file.size);
+    const box = await readBox(
+      file,
+      position,
+      file.size,
+    );
 
     if (!box) {
       break;
@@ -175,23 +189,30 @@ async function findTopLevel(
       return box;
     }
 
-    position = box.offset + box.size;
+    position =
+      box.offset + box.size;
   }
 
   return null;
 }
 
 async function findMoov(file: File): Promise<Box> {
-  const moov = await findTopLevel(file, "moov");
+  const moov =
+    await findTopLevel(file, "moov");
 
   if (!moov) {
-    throw new Error("Could not find an MP4 moov box.");
+    throw new Error(
+      "Could not find an MP4 moov box.",
+    );
   }
 
   return moov;
 }
 
-async function readFullBox(file: File, box: Box) {
+async function readFullBox(
+  file: File,
+  box: Box,
+) {
   const buffer = await file
     .slice(
       box.offset + box.headerSize,
@@ -211,46 +232,30 @@ async function readFullBox(file: File, box: Box) {
   };
 }
 
-async function readMdhd(file: File, box: Box) {
-  const { version } = await readFullBox(file, box);
+async function readMdhd(
+  file: File,
+  box: Box,
+) {
+  const { version } =
+    await readFullBox(file, box);
 
-  const base = box.offset + box.headerSize + 4;
+  const base =
+    box.offset +
+    box.headerSize +
+    4;
 
-  const length = version === 1 ? 32 : 20;
+  const length =
+    version === 1
+      ? 32
+      : 20;
 
-  const buffer = await file
-    .slice(base, base + length)
-    .arrayBuffer();
+  const buffer =
+    await file
+      .slice(base, base + length)
+      .arrayBuffer();
 
-  const view = new DataView(buffer);
-
-  if (version === 1) {
-    return {
-      version,
-      timescale: u32(view, 16),
-      duration: u64(view, 20),
-    };
-  }
-
-  return {
-    version,
-    timescale: u32(view, 8),
-    duration: u32(view, 12),
-  };
-}
-
-async function readMvhd(file: File, box: Box) {
-  const { version } = await readFullBox(file, box);
-
-  const base = box.offset + box.headerSize + 4;
-
-  const length = version === 1 ? 32 : 20;
-
-  const buffer = await file
-    .slice(base, base + length)
-    .arrayBuffer();
-
-  const view = new DataView(buffer);
+  const view =
+    new DataView(buffer);
 
   if (version === 1) {
     return {
@@ -267,14 +272,65 @@ async function readMvhd(file: File, box: Box) {
   };
 }
 
-async function readHandlerType(file: File, box: Box) {
-  const start = box.offset + box.headerSize + 8;
+async function readMvhd(
+  file: File,
+  box: Box,
+) {
+  const { version } =
+    await readFullBox(file, box);
 
-  const buffer = await file
-    .slice(start, start + 4)
-    .arrayBuffer();
+  const base =
+    box.offset +
+    box.headerSize +
+    4;
 
-  return ascii(new DataView(buffer), 0, 4);
+  const length =
+    version === 1
+      ? 32
+      : 20;
+
+  const buffer =
+    await file
+      .slice(base, base + length)
+      .arrayBuffer();
+
+  const view =
+    new DataView(buffer);
+
+  if (version === 1) {
+    return {
+      version,
+      timescale: u32(view, 16),
+      duration: u64(view, 20),
+    };
+  }
+
+  return {
+    version,
+    timescale: u32(view, 8),
+    duration: u32(view, 12),
+  };
+}
+
+async function readHandlerType(
+  file: File,
+  box: Box,
+) {
+  const start =
+    box.offset +
+    box.headerSize +
+    8;
+
+  const buffer =
+    await file
+      .slice(start, start + 4)
+      .arrayBuffer();
+
+  return ascii(
+    new DataView(buffer),
+    0,
+    4,
+  );
 }
 
 async function readSttsAverageFps(
@@ -282,13 +338,21 @@ async function readSttsAverageFps(
   stts: Box,
   timescale: number,
 ) {
-  const start = stts.offset + stts.headerSize + 4;
+  const start =
+    stts.offset +
+    stts.headerSize +
+    4;
 
-  const header = await file
-    .slice(start, start + 4)
-    .arrayBuffer();
+  const header =
+    await file
+      .slice(start, start + 4)
+      .arrayBuffer();
 
-  const count = u32(new DataView(header), 0);
+  const count =
+    u32(
+      new DataView(header),
+      0,
+    );
 
   if (!count) {
     return null;
@@ -297,11 +361,17 @@ async function readSttsAverageFps(
   let totalSamples = 0;
   let totalDuration = 0;
 
-  const chunkSize = 1024 * 1024;
+  const chunkSize =
+    1024 * 1024;
 
-  const entriesBytes = count * 8;
+  const entriesBytes =
+    count * 8;
 
-  if (!Number.isSafeInteger(entriesBytes)) {
+  if (
+    !Number.isSafeInteger(
+      entriesBytes,
+    )
+  ) {
     return null;
   }
 
@@ -310,105 +380,137 @@ async function readSttsAverageFps(
     offset < entriesBytes;
     offset += chunkSize
   ) {
-    const length = Math.min(
-      chunkSize,
-      entriesBytes - offset,
-    );
+    const length =
+      Math.min(
+        chunkSize,
+        entriesBytes - offset,
+      );
 
-    const buffer = await file
-      .slice(
-        start + 4 + offset,
-        start + 4 + offset + length,
-      )
-      .arrayBuffer();
+    const buffer =
+      await file
+        .slice(
+          start + 4 + offset,
+          start +
+            4 +
+            offset +
+            length,
+        )
+        .arrayBuffer();
 
-    const view = new DataView(buffer);
+    const view =
+      new DataView(buffer);
 
     for (
       let position = 0;
       position + 8 <= length;
       position += 8
     ) {
-      const sampleCount = u32(view, position);
+      const sampleCount =
+        u32(
+          view,
+          position,
+        );
 
-      const sampleDelta = u32(
-        view,
-        position + 4,
-      );
+      const sampleDelta =
+        u32(
+          view,
+          position + 4,
+        );
 
-      totalSamples += sampleCount;
+      totalSamples +=
+        sampleCount;
 
       totalDuration +=
-        sampleDelta * sampleCount;
+        sampleDelta *
+        sampleCount;
     }
   }
 
-  if (!totalDuration || !totalSamples || !timescale) {
+  if (
+    !totalDuration ||
+    !totalSamples ||
+    !timescale
+  ) {
     return null;
   }
 
   return (
-    (totalSamples * timescale) /
+    (totalSamples *
+      timescale) /
     totalDuration
   );
 }
 
-/*
- * IMPORTANT:
- *
- * This keeps the working method:
- *
- * - patches mvhd
- * - patches every mdhd
- * - does NOT patch tkhd
- * - does NOT patch elst
- */
 async function patchTimingBox(
   file: File,
   box: Box,
   divider: number,
 ): Promise<Patch | null> {
-  if (box.type !== "mvhd" && box.type !== "mdhd") {
+  if (
+    box.type !== "mvhd" &&
+    box.type !== "mdhd"
+  ) {
     return null;
   }
 
-  const bytes = new Uint8Array(
-    await file
-      .slice(
-        box.offset,
-        box.offset + box.size,
-      )
-      .arrayBuffer(),
-  );
+  const bytes =
+    new Uint8Array(
+      await file
+        .slice(
+          box.offset,
+          box.offset + box.size,
+        )
+        .arrayBuffer(),
+    );
 
-  const view = new DataView(bytes.buffer);
+  const view =
+    new DataView(
+      bytes.buffer,
+      bytes.byteOffset,
+      bytes.byteLength,
+    );
 
-  const version = view.getUint8(box.headerSize);
+  const version =
+    view.getUint8(
+      box.headerSize,
+    );
 
-  const base = box.headerSize + 4;
+  const base =
+    box.headerSize + 4;
 
   if (version === 0) {
-    const timescaleOffset = base + 12;
-    const durationOffset = base + 16;
+    const timescaleOffset =
+      base + 12;
 
-    const oldTimescale = u32(
-      view,
-      timescaleOffset,
-    );
+    const durationOffset =
+      base + 16;
 
-    const oldDuration = u32(
-      view,
-      durationOffset,
-    );
+    const oldTimescale =
+      u32(
+        view,
+        timescaleOffset,
+      );
 
-    const newTimescale = Math.max(
-      1,
-      Math.floor(oldTimescale / divider),
-    );
+    const oldDuration =
+      u32(
+        view,
+        durationOffset,
+      );
 
-    const newDuration = Math.floor(
-      oldDuration / divider,
-    );
+    const newTimescale =
+      Math.max(
+        1,
+        Math.floor(
+          oldTimescale /
+            divider,
+        ),
+      );
+
+    const newDuration =
+      Math.floor(
+        oldDuration /
+          divider,
+      );
 
     putU32(
       view,
@@ -422,27 +524,38 @@ async function patchTimingBox(
       newDuration,
     );
   } else if (version === 1) {
-    const timescaleOffset = base + 24;
-    const durationOffset = base + 28;
+    const timescaleOffset =
+      base + 24;
 
-    const oldTimescale = u32(
-      view,
-      timescaleOffset,
-    );
+    const durationOffset =
+      base + 28;
 
-    const oldDuration = u64(
-      view,
-      durationOffset,
-    );
+    const oldTimescale =
+      u32(
+        view,
+        timescaleOffset,
+      );
 
-    const newTimescale = Math.max(
-      1,
-      Math.floor(oldTimescale / divider),
-    );
+    const oldDuration =
+      u64(
+        view,
+        durationOffset,
+      );
 
-    const newDuration = Math.floor(
-      oldDuration / divider,
-    );
+    const newTimescale =
+      Math.max(
+        1,
+        Math.floor(
+          oldTimescale /
+            divider,
+        ),
+      );
+
+    const newDuration =
+      Math.floor(
+        oldDuration /
+          divider,
+      );
 
     putU32(
       view,
@@ -470,44 +583,59 @@ async function inspectAndBuildPatch(
   file: File,
   divider: number,
 ) {
-  const moov = await findMoov(file);
+  const moov =
+    await findMoov(file);
 
-  let mvhd: Box | undefined;
+  let mvhd:
+    Box | undefined;
 
   const allMdhd: Box[] = [];
 
   const tracks: TrackInfo[] = [];
 
-  let currentTrack: TrackInfo | null = null;
+  let currentTrack:
+    TrackInfo | null = null;
 
   await scanRange(
     file,
-    moov.offset + moov.headerSize,
-    moov.offset + moov.size,
+    moov.offset +
+      moov.headerSize,
+    moov.offset +
+      moov.size,
     async (box) => {
-      if (box.type === "mvhd") {
+      if (
+        box.type === "mvhd"
+      ) {
         mvhd = box;
       }
 
-      if (box.type === "mdhd") {
+      if (
+        box.type === "mdhd"
+      ) {
         allMdhd.push(box);
 
         if (currentTrack) {
-          currentTrack.mdhd = box;
+          currentTrack.mdhd =
+            box;
 
-          const md = await readMdhd(
-            file,
-            box,
-          );
+          const md =
+            await readMdhd(
+              file,
+              box,
+            );
 
           currentTrack.timescale =
             md.timescale;
         }
       }
 
-      if (box.type === "trak") {
+      if (
+        box.type === "trak"
+      ) {
         currentTrack = {};
-        tracks.push(currentTrack);
+        tracks.push(
+          currentTrack,
+        );
       }
 
       if (
@@ -525,28 +653,35 @@ async function inspectAndBuildPatch(
         currentTrack &&
         box.type === "stts"
       ) {
-        currentTrack.stts = box;
+        currentTrack.stts =
+          box;
       }
     },
   );
 
   if (!mvhd) {
-    throw new Error("Could not find mvhd.");
+    throw new Error(
+      "Could not find mvhd.",
+    );
   }
 
-  if (allMdhd.length === 0) {
+  if (
+    allMdhd.length === 0
+  ) {
     throw new Error(
       "Could not find any mdhd timing boxes.",
     );
   }
 
-  const videoTrack = tracks.find(
-    (track) =>
-      track.handler === "vide" &&
-      track.mdhd &&
-      track.stts &&
-      track.timescale,
-  );
+  const videoTrack =
+    tracks.find(
+      (track) =>
+        track.handler ===
+          "vide" &&
+        track.mdhd &&
+        track.stts &&
+        track.timescale,
+    );
 
   if (
     !videoTrack ||
@@ -558,11 +693,12 @@ async function inspectAndBuildPatch(
     );
   }
 
-  const fps = await readSttsAverageFps(
-    file,
-    videoTrack.stts,
-    videoTrack.timescale,
-  );
+  const fps =
+    await readSttsAverageFps(
+      file,
+      videoTrack.stts,
+      videoTrack.timescale,
+    );
 
   if (!fps) {
     throw new Error(
@@ -570,9 +706,16 @@ async function inspectAndBuildPatch(
     );
   }
 
-  const expected = divider === 4 ? 120 : 60;
+  const expected =
+    divider === 4
+      ? 120
+      : 60;
 
-  if (Math.abs(fps - expected) > 5) {
+  if (
+    Math.abs(
+      fps - expected,
+    ) > 5
+  ) {
     throw new Error(
       `Detected approximately ${fps.toFixed(
         3,
@@ -580,53 +723,72 @@ async function inspectAndBuildPatch(
     );
   }
 
-  const patches: Patch[] = [];
+  const patches: Patch[] =
+    [];
 
-  const mvPatch = await patchTimingBox(
-    file,
-    mvhd,
-    divider,
-  );
-
-  if (mvPatch) {
-    patches.push(mvPatch);
-  }
-
-  for (const mdhd of allMdhd) {
-    const patch = await patchTimingBox(
+  const mvPatch =
+    await patchTimingBox(
       file,
-      mdhd,
+      mvhd,
       divider,
     );
 
+  if (mvPatch) {
+    patches.push(
+      mvPatch,
+    );
+  }
+
+  for (
+    const mdhd of allMdhd
+  ) {
+    const patch =
+      await patchTimingBox(
+        file,
+        mdhd,
+        divider,
+      );
+
     if (patch) {
-      patches.push(patch);
+      patches.push(
+        patch,
+      );
     }
   }
 
   patches.sort(
-    (a, b) => a.offset - b.offset,
+    (a, b) =>
+      a.offset - b.offset,
   );
 
-  const mv = await readMvhd(
-    file,
-    mvhd,
-  );
+  const mv =
+    await readMvhd(
+      file,
+      mvhd,
+    );
 
   const originalDuration =
-    mv.duration / mv.timescale;
+    mv.duration /
+    mv.timescale;
 
-  const newMvTimescale = Math.max(
-    1,
-    Math.floor(mv.timescale / divider),
-  );
+  const newMvTimescale =
+    Math.max(
+      1,
+      Math.floor(
+        mv.timescale /
+          divider,
+      ),
+    );
 
-  const newMvDuration = Math.floor(
-    mv.duration / divider,
-  );
+  const newMvDuration =
+    Math.floor(
+      mv.duration /
+        divider,
+    );
 
   const outputDuration =
-    newMvDuration / newMvTimescale;
+    newMvDuration /
+    newMvTimescale;
 
   return {
     patches,
@@ -634,7 +796,8 @@ async function inspectAndBuildPatch(
     originalDuration,
     outputDuration,
     divider,
-    mdhdCount: allMdhd.length,
+    mdhdCount:
+      allMdhd.length,
   };
 }
 
@@ -655,19 +818,23 @@ async function saveWithFileSystemAccess(
     return false;
   }
 
-  const handle = await picker({
-    suggestedName: name,
+  const handle =
+    await picker({
+      suggestedName: name,
 
-    types: [
-      {
-        description: "MP4 video",
+      types: [
+        {
+          description:
+            "MP4 video",
 
-        accept: {
-          "video/mp4": [".mp4"],
+          accept: {
+            "video/mp4": [
+              ".mp4",
+            ],
+          },
         },
-      },
-    ],
-  });
+      ],
+    });
 
   const writable =
     await handle.createWritable();
@@ -678,29 +845,43 @@ async function saveWithFileSystemAccess(
     32 * 1024 * 1024;
 
   try {
-    for (const patch of patches) {
+    for (
+      const patch of patches
+    ) {
       while (
         sourcePosition <
         patch.offset
       ) {
-        const end = Math.min(
-          patch.offset,
-          sourcePosition + CHUNK_SIZE,
+        const end =
+          Math.min(
+            patch.offset,
+            sourcePosition +
+              CHUNK_SIZE,
+          );
+
+        const chunk =
+          await file
+            .slice(
+              sourcePosition,
+              end,
+            )
+            .arrayBuffer();
+
+        await writable.write(
+          chunk,
         );
 
-        const chunk = await file
-          .slice(
-            sourcePosition,
-            end,
-          )
-          .arrayBuffer();
-
-        await writable.write(chunk);
-
-        sourcePosition = end;
+        sourcePosition =
+          end;
       }
 
-      await writable.write(patch.bytes);
+      await writable.write(
+        patch.bytes.buffer.slice(
+          patch.bytes.byteOffset,
+          patch.bytes.byteOffset +
+            patch.bytes.byteLength,
+        ) as ArrayBuffer,
+      );
 
       sourcePosition =
         patch.offset +
@@ -711,21 +892,27 @@ async function saveWithFileSystemAccess(
       sourcePosition <
       file.size
     ) {
-      const end = Math.min(
-        file.size,
-        sourcePosition + CHUNK_SIZE,
+      const end =
+        Math.min(
+          file.size,
+          sourcePosition +
+            CHUNK_SIZE,
+        );
+
+      const chunk =
+        await file
+          .slice(
+            sourcePosition,
+            end,
+          )
+          .arrayBuffer();
+
+      await writable.write(
+        chunk,
       );
 
-      const chunk = await file
-        .slice(
-          sourcePosition,
-          end,
-        )
-        .arrayBuffer();
-
-      await writable.write(chunk);
-
-      sourcePosition = end;
+      sourcePosition =
+        end;
     }
 
     await writable.close();
@@ -744,12 +931,18 @@ function makeBlob(
   file: File,
   patches: Patch[],
 ) {
-  const parts: BlobPart[] = [];
+  const parts: BlobPart[] =
+    [];
 
   let position = 0;
 
-  for (const patch of patches) {
-    if (position < patch.offset) {
+  for (
+    const patch of patches
+  ) {
+    if (
+      position <
+      patch.offset
+    ) {
       parts.push(
         file.slice(
           position,
@@ -758,19 +951,19 @@ function makeBlob(
       );
     }
 
-    /*
-     * Use a standalone ArrayBuffer so
-     * TypeScript accepts this as BlobPart.
-     */
-    const bytes = new Uint8Array(
-      patch.bytes,
-    );
+    const bytes =
+      new Uint8Array(
+        patch.bytes,
+      );
 
-    const buffer = new ArrayBuffer(
-      bytes.byteLength,
-    );
+    const buffer =
+      new ArrayBuffer(
+        bytes.byteLength,
+      );
 
-    new Uint8Array(buffer).set(bytes);
+    new Uint8Array(
+      buffer,
+    ).set(bytes);
 
     parts.push(buffer);
 
@@ -779,29 +972,121 @@ function makeBlob(
       patch.bytes.byteLength;
   }
 
-  if (position < file.size) {
+  if (
+    position <
+    file.size
+  ) {
     parts.push(
-      file.slice(position),
+      file.slice(
+        position,
+      ),
     );
   }
 
-  return new Blob(parts, {
-    type: "video/mp4",
-  });
+  return new Blob(
+    parts,
+    {
+      type: "video/mp4",
+    },
+  );
+}
+
+function formatBytes(
+  bytes: number,
+) {
+  const units = [
+    "B",
+    "KB",
+    "MB",
+    "GB",
+    "TB",
+  ];
+
+  let value = bytes;
+  let index = 0;
+
+  while (
+    value >= 1024 &&
+    index <
+      units.length - 1
+  ) {
+    value /= 1024;
+    index++;
+  }
+
+  return `${value.toFixed(
+    value >= 100 ||
+      index === 0
+      ? 0
+      : 2,
+  )} ${units[index]}`;
+}
+
+function formatDuration(
+  seconds: number,
+) {
+  const totalSeconds =
+    Math.max(
+      0,
+      Math.round(seconds),
+    );
+
+  const hours =
+    Math.floor(
+      totalSeconds / 3600,
+    );
+
+  const minutes =
+    Math.floor(
+      (totalSeconds % 3600) /
+        60,
+    );
+
+  const remainingSeconds =
+    totalSeconds % 60;
+
+  if (hours) {
+    return `${hours}:${String(
+      minutes,
+    ).padStart(
+      2,
+      "0",
+    )}:${String(
+      remainingSeconds,
+    ).padStart(
+      2,
+      "0",
+    )}`;
+  }
+
+  return `${minutes}:${String(
+    remainingSeconds,
+  ).padStart(
+    2,
+    "0",
+  )}`;
 }
 
 export default function TikTokPatcher() {
+  const inputRef =
+    useRef<HTMLInputElement>(
+      null,
+    );
+
   const [file, setFile] =
-    useState<File | null>(null);
+    useState<File | null>(
+      null,
+    );
 
   const [fps, setFps] =
-    useState<number | null>(null);
+    useState<number | null>(
+      null,
+    );
 
   const [duration, setDuration] =
-    useState<number | null>(null);
-
-  const [mdhdCount, setMdhdCount] =
-    useState<number | null>(null);
+    useState<number | null>(
+      null,
+    );
 
   const [status, setStatus] =
     useState(
@@ -822,21 +1107,37 @@ export default function TikTokPatcher() {
       () =>
         typeof window !==
           "undefined" &&
-        "showSaveFilePicker" in window,
+        "showSaveFilePicker" in
+          window,
       [],
     );
 
   const inspect = useCallback(
-    async (selectedFile: File) => {
-      setFile(selectedFile);
+    async (
+      selectedFile: File,
+    ) => {
+      if (
+        !selectedFile.name
+          .toLowerCase()
+          .endsWith(".mp4")
+      ) {
+        setError(
+          "Please choose an MP4 file.",
+        );
+
+        return;
+      }
+
+      setFile(
+        selectedFile,
+      );
 
       setFps(null);
       setDuration(null);
-      setMdhdCount(null);
       setError("");
 
       setStatus(
-        "Reading MP4 timing metadata…",
+        "Reading MP4 metadata…",
       );
 
       try {
@@ -846,20 +1147,16 @@ export default function TikTokPatcher() {
             4,
           );
 
-        setFps(result.fps);
+        setFps(
+          result.fps,
+        );
+
         setDuration(
           result.originalDuration,
         );
-        setMdhdCount(
-          result.mdhdCount,
-        );
 
         setStatus(
-          `Detected ${result.fps.toFixed(
-            2,
-          )} FPS • ${formatDuration(
-            result.originalDuration,
-          )} • ready to patch.`,
+          "Ready to patch.",
         );
       } catch {
         try {
@@ -869,24 +1166,26 @@ export default function TikTokPatcher() {
               2,
             );
 
-          setFps(result.fps);
+          setFps(
+            result.fps,
+          );
+
           setDuration(
             result.originalDuration,
           );
-          setMdhdCount(
-            result.mdhdCount,
-          );
 
           setStatus(
-            `Detected ${result.fps.toFixed(
-              2,
-            )} FPS • ${formatDuration(
-              result.originalDuration,
-            )} • ready to patch.`,
+            "Ready to patch.",
           );
-        } catch (secondError) {
+        } catch (
+          secondError
+        ) {
+          setFps(null);
+          setDuration(null);
+
           setError(
-            secondError instanceof Error
+            secondError instanceof
+              Error
               ? secondError.message
               : "Could not inspect this MP4.",
           );
@@ -900,20 +1199,11 @@ export default function TikTokPatcher() {
     [],
   );
 
-  function clearFile() {
-    setFile(null);
-    setFps(null);
-    setDuration(null);
-    setMdhdCount(null);
-    setError("");
-    setBusy(false);
-    setStatus(
-      "Drop a 60 or 120 FPS MP4 to begin.",
-    );
-  }
-
   async function patch() {
-    if (!file || fps === null) {
+    if (
+      !file ||
+      fps === null
+    ) {
       return;
     }
 
@@ -922,9 +1212,13 @@ export default function TikTokPatcher() {
 
     try {
       const divider =
-        Math.abs(fps - 120) < 0.5
+        Math.abs(
+          fps - 120,
+        ) < 0.5
           ? 4
-          : Math.abs(fps - 60) < 0.5
+          : Math.abs(
+                fps - 60,
+              ) < 0.5
             ? 2
             : 0;
 
@@ -935,7 +1229,7 @@ export default function TikTokPatcher() {
       }
 
       setStatus(
-        `Patching mvhd + all mdhd boxes…`,
+        "Patching MP4 timing metadata…",
       );
 
       const result =
@@ -953,9 +1247,11 @@ export default function TikTokPatcher() {
       const outputName =
         `${baseName}_metadata_output.mp4`;
 
-      if (supportsDirectSave) {
+      if (
+        supportsDirectSave
+      ) {
         setStatus(
-          `Writing ${result.patches.length} timing patches directly to disk…`,
+          "Writing patched MP4 to disk…",
         );
 
         await saveWithFileSystemAccess(
@@ -968,18 +1264,25 @@ export default function TikTokPatcher() {
           "Preparing browser download…",
         );
 
-        const blob = makeBlob(
-          file,
-          result.patches,
-        );
+        const blob =
+          makeBlob(
+            file,
+            result.patches,
+          );
 
         const url =
-          URL.createObjectURL(blob);
+          URL.createObjectURL(
+            blob,
+          );
 
         const anchor =
-          document.createElement("a");
+          document.createElement(
+            "a",
+          );
 
-        anchor.href = url;
+        anchor.href =
+          url;
+
         anchor.download =
           outputName;
 
@@ -988,53 +1291,117 @@ export default function TikTokPatcher() {
         );
 
         anchor.click();
+
         anchor.remove();
 
-        setTimeout(() => {
-          URL.revokeObjectURL(url);
-        }, 60000);
+        setTimeout(
+          () => {
+            URL.revokeObjectURL(
+              url,
+            );
+          },
+          60000,
+        );
       }
 
       setStatus(
-        `Done • ${result.patches.length} timing boxes patched • duration ${formatDuration(
+        `Done • ${formatDuration(
           result.outputDuration,
-        )}.`,
+        )}`,
       );
-    } catch (patchError) {
+    } catch (
+      patchError
+    ) {
       setError(
-        patchError instanceof Error
+        patchError instanceof
+          Error
           ? patchError.message
           : "Patch failed.",
       );
 
-      setStatus("Patch failed.");
+      setStatus(
+        "Patch failed.",
+      );
     } finally {
       setBusy(false);
     }
   }
 
+  function clearFile() {
+    setFile(null);
+    setFps(null);
+    setDuration(null);
+    setError("");
+    setStatus(
+      "Drop a 60 or 120 FPS MP4 to begin.",
+    );
+
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
+  }
+
+  const ready =
+    file &&
+    fps !== null &&
+    !busy &&
+    !error;
+
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-background">
-      {/* Compact tool header */}
-      <div className="flex items-center justify-between border-b border-border px-5 py-4">
-        <div>
-          <p className="text-sm font-semibold">
-            MP4 metadata
-          </p>
+    <main className="mx-auto w-full max-w-4xl px-5 py-10 sm:px-6 sm:py-14">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          MP4 Metadata Patcher
+        </h1>
 
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            60 / 120 FPS timing patch
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          Local
-        </div>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          60 / 120 FPS timing metadata
+        </p>
       </div>
 
-      {/* Upload / selected file */}
-      <div className="p-5">
+      <section className="overflow-hidden rounded-2xl border border-border bg-background">
+        <div className="border-b border-border px-5 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">
+                {file
+                  ? file.name
+                  : "Choose an MP4"}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                {file
+                  ? `${formatBytes(
+                      file.size,
+                    )}${
+                      fps !== null
+                        ? ` · ${fps.toFixed(
+                            2,
+                          )} FPS`
+                        : ""
+                    }${
+                      duration !== null
+                        ? ` · ${formatDuration(
+                            duration,
+                          )}`
+                        : ""
+                    }`
+                  : "Local processing · no re-encoding"}
+              </p>
+            </div>
+
+            {file && (
+              <button
+                type="button"
+                onClick={clearFile}
+                className="shrink-0 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+
         {!file ? (
           <div
             onDragOver={(event) => {
@@ -1052,16 +1419,18 @@ export default function TikTokPatcher() {
                 event.dataTransfer.files?.[0];
 
               if (droppedFile) {
-                void inspect(droppedFile);
+                void inspect(
+                  droppedFile,
+                );
               }
             }}
-            className={`flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed px-6 py-10 text-center transition-colors ${
+            className={`m-4 flex min-h-[270px] flex-col items-center justify-center rounded-xl border border-dashed px-6 py-10 text-center transition-colors sm:m-5 ${
               dragging
-                ? "border-foreground bg-muted"
+                ? "border-foreground bg-muted/50"
                 : "border-border hover:border-foreground/30"
             }`}
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted text-[10px] font-bold">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-muted text-[10px] font-bold tracking-tight">
               MP4
             </div>
 
@@ -1069,14 +1438,15 @@ export default function TikTokPatcher() {
               Drop your MP4 here
             </p>
 
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              60 or 120 FPS · no re-encoding
+            <p className="mt-1 text-xs text-muted-foreground">
+              60 or 120 FPS
             </p>
 
-            <label className="mt-5 inline-flex h-9 cursor-pointer items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
+            <label className="mt-5 cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-85">
               Choose MP4
 
               <input
+                ref={inputRef}
                 type="file"
                 accept="video/mp4,.mp4"
                 className="hidden"
@@ -1085,174 +1455,89 @@ export default function TikTokPatcher() {
                     event.target.files?.[0];
 
                   if (selected) {
-                    void inspect(selected);
+                    void inspect(
+                      selected,
+                    );
                   }
                 }}
               />
             </label>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border">
-            {/* File */}
-            <div className="flex items-center gap-3 px-4 py-4">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-[10px] font-bold">
-                MP4
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
-                  {file.name}
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {formatBytes(file.size)}
-                  {fps !== null
-                    ? ` · ${fps.toFixed(2)} FPS`
-                    : ""}
-                  {duration !== null
-                    ? ` · ${formatDuration(duration)}`
-                    : ""}
-                  {mdhdCount !== null
-                    ? ` · ${mdhdCount} mdhd`
-                    : ""}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={clearFile}
-                disabled={busy}
-                className="shrink-0 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-              >
-                Remove
-              </button>
-            </div>
-
-            {/* Status */}
-            <div className="border-t border-border px-4 py-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="p-4 sm:p-5">
+            <div className="rounded-xl border border-border bg-muted/30">
+              <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        error
-                          ? "bg-red-500"
-                          : busy
-                            ? "bg-yellow-500"
-                            : "bg-emerald-500"
-                      }`}
-                    />
+                  <p className="truncate text-sm font-medium">
+                    {file.name}
+                  </p>
 
-                    <span className="text-sm font-medium">
-                      {error
-                        ? "Error"
-                        : busy
-                          ? "Patching"
-                          : "Ready"}
-                    </span>
-                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatBytes(
+                      file.size,
+                    )}
 
-                  <p
-                    className={`mt-1 text-xs ${
-                      error
-                        ? "text-red-500"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {error || status}
+                    {fps !== null
+                      ? ` · ${fps.toFixed(
+                          2,
+                        )} FPS`
+                      : ""}
+
+                    {duration !== null
+                      ? ` · ${formatDuration(
+                          duration,
+                        )}`
+                      : ""}
                   </p>
                 </div>
 
-                {!error && (
-                  <button
-                    type="button"
-                    onClick={() => void patch()}
-                    disabled={
-                      busy ||
-                      fps === null
-                    }
-                    className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {busy
-                      ? "Patching…"
-                      : supportsDirectSave
-                        ? "Patch & Save"
-                        : "Patch & Download"}
-                  </button>
-                )}
+                <div className="text-xs text-muted-foreground">
+                  {busy
+                    ? "Processing…"
+                    : error
+                      ? "Error"
+                      : status}
+                </div>
+              </div>
+
+              {error && (
+                <div className="border-t border-border px-4 py-3 text-xs text-red-500">
+                  {error}
+                </div>
+              )}
+
+              <div className="border-t border-border p-4">
+                <button
+                  type="button"
+                  onClick={() =>
+                    void patch()
+                  }
+                  disabled={
+                    !ready
+                  }
+                  className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {busy
+                    ? "Patching…"
+                    : supportsDirectSave
+                      ? "Patch & Save MP4"
+                      : "Patch & Download MP4"}
+                </button>
               </div>
             </div>
           </div>
         )}
-      </div>
 
-      {/* Minimal footer */}
-      <div className="border-t border-border px-5 py-3">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-          <span>Client-side</span>
-          <span>•</span>
-          <span>No re-encode</span>
-          <span>•</span>
-          <span>60 / 120 FPS</span>
+        <div className="border-t border-border px-5 py-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <span>60 / 120 FPS</span>
+            <span aria-hidden="true">•</span>
+            <span>No re-encoding</span>
+            <span aria-hidden="true">•</span>
+            <span>Processed locally</span>
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
-}
-
-function formatBytes(bytes: number) {
-  const units = [
-    "B",
-    "KB",
-    "MB",
-    "GB",
-    "TB",
-  ];
-
-  let value = bytes;
-  let index = 0;
-
-  while (
-    value >= 1024 &&
-    index < units.length - 1
-  ) {
-    value /= 1024;
-    index++;
-  }
-
-  return `${value.toFixed(
-    value >= 100 || index === 0
-      ? 0
-      : 2,
-  )} ${units[index]}`;
-}
-
-function formatDuration(seconds: number) {
-  const totalSeconds = Math.max(
-    0,
-    Math.round(seconds),
-  );
-
-  const hours = Math.floor(
-    totalSeconds / 3600,
-  );
-
-  const minutes = Math.floor(
-    (totalSeconds % 3600) / 60,
-  );
-
-  const remainingSeconds =
-    totalSeconds % 60;
-
-  if (hours) {
-    return `${hours}:${String(
-      minutes,
-    ).padStart(2, "0")}:${String(
-      remainingSeconds,
-    ).padStart(2, "0")}`;
-  }
-
-  return `${minutes}:${String(
-    remainingSeconds,
-  ).padStart(2, "0")}`;
 }
