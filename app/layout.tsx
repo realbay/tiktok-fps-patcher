@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Header from "@/components/Header";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,7 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "TikTok FPS Patcher",
-  description: "Patch MP4 timing metadata locally without re-encoding.",
+  description:
+    "Patch MP4 timing metadata locally without re-encoding.",
 };
 
 export default function RootLayout({
@@ -26,7 +28,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable}`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
         <script
@@ -34,13 +36,16 @@ export default function RootLayout({
             __html: `
               (function () {
                 try {
-                  var theme = localStorage.getItem("theme");
+                  var t = localStorage.getItem("theme");
 
                   if (
-                    theme === "dark" ||
-                    (!theme &&
-                      window.matchMedia &&
-                      window.matchMedia("(prefers-color-scheme: dark)").matches)
+                    t === "dark" ||
+                    (
+                      !t &&
+                      window.matchMedia(
+                        "(prefers-color-scheme: dark)"
+                      ).matches
+                    )
                   ) {
                     document.documentElement.classList.add("dark");
                   }
@@ -51,7 +56,13 @@ export default function RootLayout({
         />
       </head>
 
-      <body>{children}</body>
+      <body className="flex min-h-full flex-col bg-background text-foreground">
+        <Header />
+
+        <div className="flex-1">
+          {children}
+        </div>
+      </body>
     </html>
   );
 }
