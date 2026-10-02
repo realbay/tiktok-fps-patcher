@@ -1,6 +1,19 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  Check,
+  FileVideo,
+  HardDrive,
+  Loader2,
+  Upload,
+  X,
+} from "lucide-react";
 
 type Box = {
   offset: number;
@@ -48,23 +61,59 @@ function u64(view: DataView, offset: number): number {
   return hi * 4294967296 + lo;
 }
 
-function putU32(view: DataView, offset: number, value: number) {
-  view.setUint32(offset, value >>> 0, false);
+function putU32(
+  view: DataView,
+  offset: number,
+  value: number,
+) {
+  view.setUint32(
+    offset,
+    value >>> 0,
+    false,
+  );
 }
 
-function putU64(view: DataView, offset: number, value: number) {
-  const hi = Math.floor(value / 4294967296);
-  const lo = value - hi * 4294967296;
+function putU64(
+  view: DataView,
+  offset: number,
+  value: number,
+) {
+  const hi = Math.floor(
+    value / 4294967296,
+  );
 
-  view.setUint32(offset, hi >>> 0, false);
-  view.setUint32(offset + 4, lo >>> 0, false);
+  const lo =
+    value -
+    hi * 4294967296;
+
+  view.setUint32(
+    offset,
+    hi >>> 0,
+    false,
+  );
+
+  view.setUint32(
+    offset + 4,
+    lo >>> 0,
+    false,
+  );
 }
 
-function ascii(view: DataView, offset: number, length: number) {
+function ascii(
+  view: DataView,
+  offset: number,
+  length: number,
+) {
   let result = "";
 
-  for (let i = 0; i < length; i++) {
-    result += String.fromCharCode(view.getUint8(offset + i));
+  for (
+    let i = 0;
+    i < length;
+    i++
+  ) {
+    result += String.fromCharCode(
+      view.getUint8(offset + i),
+    );
   }
 
   return result;
@@ -75,44 +124,80 @@ async function readBox(
   offset: number,
   limit: number,
 ): Promise<Box | null> {
-  if (offset + 8 > limit) {
+  if (
+    offset + 8 >
+    limit
+  ) {
     return null;
   }
 
-  const buffer = await file
-    .slice(offset, Math.min(offset + 16, limit))
-    .arrayBuffer();
+  const buffer =
+    await file
+      .slice(
+        offset,
+        Math.min(
+          offset + 16,
+          limit,
+        ),
+      )
+      .arrayBuffer();
 
-  const view = new DataView(buffer);
+  const view =
+    new DataView(buffer);
 
-  let size = u32(view, 0);
+  let size =
+    u32(view, 0);
 
-  const type = ascii(view, 4, 4);
+  const type =
+    ascii(
+      view,
+      4,
+      4,
+    );
 
   let headerSize = 8;
 
   if (size === 1) {
-    if (view.byteLength < 16) {
+    if (
+      view.byteLength <
+      16
+    ) {
       return null;
     }
 
-    const largeSize = u64(view, 8);
+    const largeSize =
+      u64(
+        view,
+        8,
+      );
 
-    if (!Number.isSafeInteger(largeSize)) {
+    if (
+      !Number.isSafeInteger(
+        largeSize,
+      )
+    ) {
       throw new Error(
         "MP4 box is too large for this browser.",
       );
     }
 
-    size = largeSize;
-    headerSize = 16;
-  } else if (size === 0) {
-    size = limit - offset;
+    size =
+      largeSize;
+
+    headerSize =
+      16;
+  } else if (
+    size === 0
+  ) {
+    size =
+      limit - offset;
   }
 
   if (
-    size < headerSize ||
-    offset + size > limit
+    size <
+      headerSize ||
+    offset + size >
+      limit
   ) {
     return null;
   }
@@ -129,12 +214,23 @@ async function scanRange(
   file: File,
   start: number,
   end: number,
-  visitor: (box: Box) => Promise<void>,
+  visitor: (
+    box: Box,
+  ) => Promise<void>,
 ) {
-  let position = start;
+  let position =
+    start;
 
-  while (position + 8 <= end) {
-    const box = await readBox(file, position, end);
+  while (
+    position + 8 <=
+    end
+  ) {
+    const box =
+      await readBox(
+        file,
+        position,
+        end,
+      );
 
     if (!box) {
       break;
@@ -142,18 +238,30 @@ async function scanRange(
 
     await visitor(box);
 
-    if (CONTAINERS.has(box.type)) {
+    if (
+      CONTAINERS.has(
+        box.type,
+      )
+    ) {
       let childStart =
-        box.offset + box.headerSize;
+        box.offset +
+        box.headerSize;
 
-      if (box.type === "meta") {
+      if (
+        box.type ===
+        "meta"
+      ) {
         childStart += 4;
       }
 
       const boxEnd =
-        box.offset + box.size;
+        box.offset +
+        box.size;
 
-      if (childStart < boxEnd) {
+      if (
+        childStart <
+        boxEnd
+      ) {
         await scanRange(
           file,
           childStart,
@@ -164,7 +272,8 @@ async function scanRange(
     }
 
     position =
-      box.offset + box.size;
+      box.offset +
+      box.size;
   }
 }
 
@@ -174,31 +283,44 @@ async function findTopLevel(
 ): Promise<Box | null> {
   let position = 0;
 
-  while (position + 8 <= file.size) {
-    const box = await readBox(
-      file,
-      position,
-      file.size,
-    );
+  while (
+    position + 8 <=
+    file.size
+  ) {
+    const box =
+      await readBox(
+        file,
+        position,
+        file.size,
+      );
 
     if (!box) {
       break;
     }
 
-    if (box.type === wanted) {
+    if (
+      box.type ===
+      wanted
+    ) {
       return box;
     }
 
     position =
-      box.offset + box.size;
+      box.offset +
+      box.size;
   }
 
   return null;
 }
 
-async function findMoov(file: File): Promise<Box> {
+async function findMoov(
+  file: File,
+): Promise<Box> {
   const moov =
-    await findTopLevel(file, "moov");
+    await findTopLevel(
+      file,
+      "moov",
+    );
 
   if (!moov) {
     throw new Error(
@@ -213,17 +335,23 @@ async function readFullBox(
   file: File,
   box: Box,
 ) {
-  const buffer = await file
-    .slice(
-      box.offset + box.headerSize,
-      box.offset + box.headerSize + 4,
-    )
-    .arrayBuffer();
+  const buffer =
+    await file
+      .slice(
+        box.offset +
+          box.headerSize,
+        box.offset +
+          box.headerSize +
+          4,
+      )
+      .arrayBuffer();
 
-  const view = new DataView(buffer);
+  const view =
+    new DataView(buffer);
 
   return {
-    version: view.getUint8(0),
+    version:
+      view.getUint8(0),
 
     flags:
       (view.getUint8(1) << 16) |
@@ -237,7 +365,10 @@ async function readMdhd(
   box: Box,
 ) {
   const { version } =
-    await readFullBox(file, box);
+    await readFullBox(
+      file,
+      box,
+    );
 
   const base =
     box.offset +
@@ -251,24 +382,33 @@ async function readMdhd(
 
   const buffer =
     await file
-      .slice(base, base + length)
+      .slice(
+        base,
+        base + length,
+      )
       .arrayBuffer();
 
   const view =
     new DataView(buffer);
 
-  if (version === 1) {
+  if (
+    version === 1
+  ) {
     return {
       version,
-      timescale: u32(view, 16),
-      duration: u64(view, 20),
+      timescale:
+        u32(view, 16),
+      duration:
+        u64(view, 20),
     };
   }
 
   return {
     version,
-    timescale: u32(view, 8),
-    duration: u32(view, 12),
+    timescale:
+      u32(view, 8),
+    duration:
+      u32(view, 12),
   };
 }
 
@@ -277,7 +417,10 @@ async function readMvhd(
   box: Box,
 ) {
   const { version } =
-    await readFullBox(file, box);
+    await readFullBox(
+      file,
+      box,
+    );
 
   const base =
     box.offset +
@@ -291,24 +434,33 @@ async function readMvhd(
 
   const buffer =
     await file
-      .slice(base, base + length)
+      .slice(
+        base,
+        base + length,
+      )
       .arrayBuffer();
 
   const view =
     new DataView(buffer);
 
-  if (version === 1) {
+  if (
+    version === 1
+  ) {
     return {
       version,
-      timescale: u32(view, 16),
-      duration: u64(view, 20),
+      timescale:
+        u32(view, 16),
+      duration:
+        u64(view, 20),
     };
   }
 
   return {
     version,
-    timescale: u32(view, 8),
-    duration: u32(view, 12),
+    timescale:
+      u32(view, 8),
+    duration:
+      u32(view, 12),
   };
 }
 
@@ -323,7 +475,10 @@ async function readHandlerType(
 
   const buffer =
     await file
-      .slice(start, start + 4)
+      .slice(
+        start,
+        start + 4,
+      )
       .arrayBuffer();
 
   return ascii(
@@ -345,7 +500,10 @@ async function readSttsAverageFps(
 
   const header =
     await file
-      .slice(start, start + 4)
+      .slice(
+        start,
+        start + 4,
+      )
       .arrayBuffer();
 
   const count =
@@ -383,13 +541,16 @@ async function readSttsAverageFps(
     const length =
       Math.min(
         chunkSize,
-        entriesBytes - offset,
+        entriesBytes -
+          offset,
       );
 
     const buffer =
       await file
         .slice(
-          start + 4 + offset,
+          start +
+            4 +
+            offset,
           start +
             4 +
             offset +
@@ -402,7 +563,8 @@ async function readSttsAverageFps(
 
     for (
       let position = 0;
-      position + 8 <= length;
+      position + 8 <=
+      length;
       position += 8
     ) {
       const sampleCount =
@@ -458,7 +620,8 @@ async function patchTimingBox(
       await file
         .slice(
           box.offset,
-          box.offset + box.size,
+          box.offset +
+            box.size,
         )
         .arrayBuffer(),
     );
@@ -466,8 +629,6 @@ async function patchTimingBox(
   const view =
     new DataView(
       bytes.buffer,
-      bytes.byteOffset,
-      bytes.byteLength,
     );
 
   const version =
@@ -478,7 +639,9 @@ async function patchTimingBox(
   const base =
     box.headerSize + 4;
 
-  if (version === 0) {
+  if (
+    version === 0
+  ) {
     const timescaleOffset =
       base + 12;
 
@@ -523,7 +686,9 @@ async function patchTimingBox(
       durationOffset,
       newDuration,
     );
-  } else if (version === 1) {
+  } else if (
+    version === 1
+  ) {
     const timescaleOffset =
       base + 24;
 
@@ -573,9 +738,11 @@ async function patchTimingBox(
   }
 
   return {
-    offset: box.offset,
+    offset:
+      box.offset,
     bytes,
-    label: box.type,
+    label:
+      box.type,
   };
 }
 
@@ -587,14 +754,18 @@ async function inspectAndBuildPatch(
     await findMoov(file);
 
   let mvhd:
-    Box | undefined;
+    | Box
+    | undefined;
 
-  const allMdhd: Box[] = [];
+  const allMdhd:
+    Box[] = [];
 
-  const tracks: TrackInfo[] = [];
+  const tracks:
+    TrackInfo[] = [];
 
   let currentTrack:
-    TrackInfo | null = null;
+    TrackInfo | null =
+    null;
 
   await scanRange(
     file,
@@ -604,17 +775,31 @@ async function inspectAndBuildPatch(
       moov.size,
     async (box) => {
       if (
-        box.type === "mvhd"
+        box.type ===
+        "mvhd"
       ) {
         mvhd = box;
       }
 
       if (
-        box.type === "mdhd"
+        box.type ===
+        "trak"
+      ) {
+        currentTrack = {};
+        tracks.push(
+          currentTrack,
+        );
+      }
+
+      if (
+        box.type ===
+        "mdhd"
       ) {
         allMdhd.push(box);
 
-        if (currentTrack) {
+        if (
+          currentTrack
+        ) {
           currentTrack.mdhd =
             box;
 
@@ -630,17 +815,9 @@ async function inspectAndBuildPatch(
       }
 
       if (
-        box.type === "trak"
-      ) {
-        currentTrack = {};
-        tracks.push(
-          currentTrack,
-        );
-      }
-
-      if (
         currentTrack &&
-        box.type === "hdlr"
+        box.type ===
+        "hdlr"
       ) {
         currentTrack.handler =
           await readHandlerType(
@@ -651,7 +828,8 @@ async function inspectAndBuildPatch(
 
       if (
         currentTrack &&
-        box.type === "stts"
+        box.type ===
+        "stts"
       ) {
         currentTrack.stts =
           box;
@@ -723,8 +901,8 @@ async function inspectAndBuildPatch(
     );
   }
 
-  const patches: Patch[] =
-    [];
+  const patches:
+    Patch[] = [];
 
   const mvPatch =
     await patchTimingBox(
@@ -758,7 +936,8 @@ async function inspectAndBuildPatch(
 
   patches.sort(
     (a, b) =>
-      a.offset - b.offset,
+      a.offset -
+      b.offset,
   );
 
   const mv =
@@ -820,13 +999,13 @@ async function saveWithFileSystemAccess(
 
   const handle =
     await picker({
-      suggestedName: name,
+      suggestedName:
+        name,
 
       types: [
         {
           description:
             "MP4 video",
-
           accept: {
             "video/mp4": [
               ".mp4",
@@ -875,12 +1054,19 @@ async function saveWithFileSystemAccess(
           end;
       }
 
+      const patchBuffer =
+        new ArrayBuffer(
+          patch.bytes.byteLength,
+        );
+
+      new Uint8Array(
+        patchBuffer,
+      ).set(
+        patch.bytes,
+      );
+
       await writable.write(
-        patch.bytes.buffer.slice(
-          patch.bytes.byteOffset,
-          patch.bytes.byteOffset +
-            patch.bytes.byteLength,
-        ) as ArrayBuffer,
+        patchBuffer,
       );
 
       sourcePosition =
@@ -931,8 +1117,8 @@ function makeBlob(
   file: File,
   patches: Patch[],
 ) {
-  const parts: BlobPart[] =
-    [];
+  const parts:
+    BlobPart[] = [];
 
   let position = 0;
 
@@ -951,19 +1137,16 @@ function makeBlob(
       );
     }
 
-    const bytes =
-      new Uint8Array(
-        patch.bytes,
-      );
-
     const buffer =
       new ArrayBuffer(
-        bytes.byteLength,
+        patch.bytes.byteLength,
       );
 
     new Uint8Array(
       buffer,
-    ).set(bytes);
+    ).set(
+      patch.bytes,
+    );
 
     parts.push(buffer);
 
@@ -991,179 +1174,275 @@ function makeBlob(
   );
 }
 
-function formatBytes(
-  bytes: number,
-) {
-  const units = [
-    "B",
-    "KB",
-    "MB",
-    "GB",
-    "TB",
-  ];
+function createThumbnail(
+  file: File,
+): Promise<string | null> {
+  return new Promise(
+    (resolve) => {
+      const video =
+        document.createElement(
+          "video",
+        );
 
-  let value = bytes;
-  let index = 0;
+      const url =
+        URL.createObjectURL(
+          file,
+        );
 
-  while (
-    value >= 1024 &&
-    index <
-      units.length - 1
-  ) {
-    value /= 1024;
-    index++;
-  }
+      video.preload =
+        "metadata";
+      video.muted = true;
+      video.playsInline =
+        true;
 
-  return `${value.toFixed(
-    value >= 100 ||
-      index === 0
-      ? 0
-      : 2,
-  )} ${units[index]}`;
-}
+      const cleanup =
+        () => {
+          video.remove();
+          URL.revokeObjectURL(
+            url,
+          );
+        };
 
-function formatDuration(
-  seconds: number,
-) {
-  const totalSeconds =
-    Math.max(
-      0,
-      Math.round(seconds),
-    );
+      video.onloadedmetadata =
+        () => {
+          const targetTime =
+            Math.min(
+              0.25,
+              Math.max(
+                0,
+                video.duration /
+                  10,
+              ),
+            );
 
-  const hours =
-    Math.floor(
-      totalSeconds / 3600,
-    );
+          video.currentTime =
+            Number.isFinite(
+              targetTime,
+            )
+              ? targetTime
+              : 0;
+        };
 
-  const minutes =
-    Math.floor(
-      (totalSeconds % 3600) /
-        60,
-    );
+      video.onseeked =
+        () => {
+          try {
+            const width =
+              video.videoWidth ||
+              640;
 
-  const remainingSeconds =
-    totalSeconds % 60;
+            const height =
+              video.videoHeight ||
+              360;
 
-  if (hours) {
-    return `${hours}:${String(
-      minutes,
-    ).padStart(
-      2,
-      "0",
-    )}:${String(
-      remainingSeconds,
-    ).padStart(
-      2,
-      "0",
-    )}`;
-  }
+            const scale =
+              Math.min(
+                1,
+                640 / width,
+              );
 
-  return `${minutes}:${String(
-    remainingSeconds,
-  ).padStart(
-    2,
-    "0",
-  )}`;
+            const canvas =
+              document.createElement(
+                "canvas",
+              );
+
+            canvas.width =
+              Math.max(
+                1,
+                Math.round(
+                  width * scale,
+                ),
+              );
+
+            canvas.height =
+              Math.max(
+                1,
+                Math.round(
+                  height * scale,
+                ),
+              );
+
+            const context =
+              canvas.getContext(
+                "2d",
+              );
+
+            if (!context) {
+              cleanup();
+              resolve(
+                null,
+              );
+              return;
+            }
+
+            context.drawImage(
+              video,
+              0,
+              0,
+              canvas.width,
+              canvas.height,
+            );
+
+            const thumbnail =
+              canvas.toDataURL(
+                "image/jpeg",
+                0.82,
+              );
+
+            cleanup();
+            resolve(
+              thumbnail,
+            );
+          } catch {
+            cleanup();
+            resolve(
+              null,
+            );
+          }
+        };
+
+      video.onerror =
+        () => {
+          cleanup();
+          resolve(
+            null,
+          );
+        };
+
+      video.src =
+        url;
+    },
+  );
 }
 
 export default function TikTokPatcher() {
+  const [
+    file,
+    setFile,
+  ] =
+    useState<File | null>(
+      null,
+    );
+
+  const [
+    thumbnail,
+    setThumbnail,
+  ] =
+    useState<string | null>(
+      null,
+    );
+
+  const [
+    fps,
+    setFps,
+  ] =
+    useState<number | null>(
+      null,
+    );
+
+  const [
+    duration,
+    setDuration,
+  ] =
+    useState<number | null>(
+      null,
+    );
+
+  const [
+    mdhdCount,
+    setMdhdCount,
+  ] =
+    useState<number | null>(
+      null,
+    );
+
+  const [
+    status,
+    setStatus,
+  ] =
+    useState(
+      "Choose a video to begin.",
+    );
+
+  const [
+    error,
+    setError,
+  ] =
+    useState("");
+
+  const [
+    busy,
+    setBusy,
+  ] =
+    useState(false);
+
+  const [
+    dragging,
+    setDragging,
+  ] =
+    useState(false);
+
   const inputRef =
     useRef<HTMLInputElement>(
       null,
     );
 
-  const [file, setFile] =
-    useState<File | null>(
-      null,
-    );
-
-  const [fps, setFps] =
-    useState<number | null>(
-      null,
-    );
-
-  const [duration, setDuration] =
-    useState<number | null>(
-      null,
-    );
-
-  const [status, setStatus] =
-    useState(
-      "Drop a 60 or 120 FPS MP4 to begin.",
-    );
-
-  const [error, setError] =
-    useState("");
-
-  const [busy, setBusy] =
-    useState(false);
-
-  const [dragging, setDragging] =
-    useState(false);
-
   const supportsDirectSave =
-    useMemo(
-      () =>
-        typeof window !==
-          "undefined" &&
-        "showSaveFilePicker" in
-          window,
-      [],
-    );
+    typeof window !==
+      "undefined" &&
+    "showSaveFilePicker" in
+      window;
 
-  const inspect = useCallback(
-    async (
-      selectedFile: File,
-    ) => {
-      if (
-        !selectedFile.name
-          .toLowerCase()
-          .endsWith(".mp4")
-      ) {
-        setError(
-          "Please choose an MP4 file.",
+  useEffect(() => {
+    return () => {
+      if (thumbnail) {
+        // Thumbnail is a data URL, so
+        // there is nothing to revoke.
+      }
+    };
+  }, [thumbnail]);
+
+  const inspect =
+    useCallback(
+      async (
+        selectedFile: File,
+      ) => {
+        setFile(
+          selectedFile,
         );
 
-        return;
-      }
-
-      setFile(
-        selectedFile,
-      );
-
-      setFps(null);
-      setDuration(null);
-      setError("");
-
-      setStatus(
-        "Reading MP4 metadata…",
-      );
-
-      try {
-        const result =
-          await inspectAndBuildPatch(
-            selectedFile,
-            4,
-          );
+        setThumbnail(
+          null,
+        );
 
         setFps(
-          result.fps,
+          null,
         );
 
         setDuration(
-          result.originalDuration,
+          null,
         );
 
-        setStatus(
-          "Ready to patch.",
+        setMdhdCount(
+          null,
         );
-      } catch {
+
+        setError("");
+
+        setStatus(
+          "Reading video metadata…",
+        );
+
+        void createThumbnail(
+          selectedFile,
+        ).then(
+          setThumbnail,
+        );
+
         try {
           const result =
             await inspectAndBuildPatch(
               selectedFile,
-              2,
+              4,
             );
 
           setFps(
@@ -1174,30 +1453,87 @@ export default function TikTokPatcher() {
             result.originalDuration,
           );
 
+          setMdhdCount(
+            result.mdhdCount,
+          );
+
           setStatus(
             "Ready to patch.",
           );
-        } catch (
-          secondError
-        ) {
-          setFps(null);
-          setDuration(null);
+        } catch {
+          try {
+            const result =
+              await inspectAndBuildPatch(
+                selectedFile,
+                2,
+              );
 
-          setError(
-            secondError instanceof
-              Error
-              ? secondError.message
-              : "Could not inspect this MP4.",
-          );
+            setFps(
+              result.fps,
+            );
 
-          setStatus(
-            "Could not inspect the file.",
-          );
+            setDuration(
+              result.originalDuration,
+            );
+
+            setMdhdCount(
+              result.mdhdCount,
+            );
+
+            setStatus(
+              "Ready to patch.",
+            );
+          } catch (
+            secondError
+          ) {
+            setError(
+              secondError instanceof
+                Error
+                ? secondError.message
+                : "Could not inspect this MP4.",
+            );
+
+            setStatus(
+              "Could not read this video.",
+            );
+          }
         }
-      }
-    },
-    [],
-  );
+      },
+      [],
+    );
+
+  function clearFile() {
+    setFile(
+      null,
+    );
+
+    setThumbnail(
+      null,
+    );
+
+    setFps(
+      null,
+    );
+
+    setDuration(
+      null,
+    );
+
+    setMdhdCount(
+      null,
+    );
+
+    setError("");
+
+    setStatus(
+      "Choose a video to begin.",
+    );
+
+    if (inputRef.current) {
+      inputRef.current.value =
+        "";
+    }
+  }
 
   async function patch() {
     if (
@@ -1207,7 +1543,10 @@ export default function TikTokPatcher() {
       return;
     }
 
-    setBusy(true);
+    setBusy(
+      true,
+    );
+
     setError("");
 
     try {
@@ -1222,14 +1561,16 @@ export default function TikTokPatcher() {
             ? 2
             : 0;
 
-      if (divider === 0) {
+      if (
+        divider === 0
+      ) {
         throw new Error(
           "This patcher supports 60 or 120 FPS.",
         );
       }
 
       setStatus(
-        "Patching MP4 timing metadata…",
+        "Preparing MP4 timing metadata…",
       );
 
       const result =
@@ -1305,9 +1646,7 @@ export default function TikTokPatcher() {
       }
 
       setStatus(
-        `Done • ${formatDuration(
-          result.outputDuration,
-        )}`,
+        "Finished. Your patched MP4 is ready.",
       );
     } catch (
       patchError
@@ -1323,221 +1662,476 @@ export default function TikTokPatcher() {
         "Patch failed.",
       );
     } finally {
-      setBusy(false);
+      setBusy(
+        false,
+      );
     }
   }
 
-  function clearFile() {
-    setFile(null);
-    setFps(null);
-    setDuration(null);
-    setError("");
-    setStatus(
-      "Drop a 60 or 120 FPS MP4 to begin.",
+  function handleDrop(
+    event: React.DragEvent,
+  ) {
+    event.preventDefault();
+
+    setDragging(
+      false,
     );
 
-    if (inputRef.current) {
-      inputRef.current.value = "";
+    const droppedFile =
+      event.dataTransfer.files?.[0];
+
+    if (
+      droppedFile
+    ) {
+      void inspect(
+        droppedFile,
+      );
     }
   }
-
-  const ready =
-    file &&
-    fps !== null &&
-    !busy &&
-    !error;
 
   return (
     <main className="mx-auto w-full max-w-4xl px-5 py-10 sm:px-6 sm:py-14">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          MP4 Metadata Patcher
-        </h1>
-
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          60 / 120 FPS timing metadata
-        </p>
-      </div>
-
-      <section className="overflow-hidden rounded-2xl border border-border bg-background">
-        <div className="border-b border-border px-5 py-4">
+      <section className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+        {/* Compact tool heading */}
+        <div className="border-b border-border px-5 py-4 sm:px-6">
           <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium">
-                {file
-                  ? file.name
-                  : "Choose an MP4"}
-              </p>
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+                <FilmMark />
+              </div>
 
-              <p className="mt-1 text-xs text-muted-foreground">
-                {file
-                  ? `${formatBytes(
-                      file.size,
-                    )}${
-                      fps !== null
-                        ? ` · ${fps.toFixed(
-                            2,
-                          )} FPS`
-                        : ""
-                    }${
-                      duration !== null
-                        ? ` · ${formatDuration(
-                            duration,
-                          )}`
-                        : ""
-                    }`
-                  : "Local processing · no re-encoding"}
-              </p>
+              <div className="min-w-0">
+                <h1 className="truncate text-sm font-semibold">
+                  TikTok FPS Patcher
+                </h1>
+
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  60 / 120 FPS MP4 timing
+                </p>
+              </div>
             </div>
 
-            {file && (
-              <button
-                type="button"
-                onClick={clearFile}
-                className="shrink-0 text-xs text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Remove
-              </button>
-            )}
+            <div className="hidden text-right text-xs text-muted-foreground sm:block">
+              <div>
+                Runs in your browser
+              </div>
+
+              <div className="mt-0.5">
+                No upload required
+              </div>
+            </div>
           </div>
         </div>
 
         {!file ? (
-          <div
-            onDragOver={(event) => {
-              event.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => {
-              setDragging(false);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              setDragging(false);
+          <div className="p-4 sm:p-5">
+            <div
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => {
+                setDragging(false);
+              }}
+              onDrop={handleDrop}
+              className={`relative flex min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed px-6 py-12 text-center transition-colors sm:min-h-[390px] ${
+                dragging
+                  ? "border-foreground bg-muted/40"
+                  : "border-border hover:border-foreground/30 hover:bg-muted/20"
+              }`}
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-muted">
+                <Upload className="h-5 w-5 text-muted-foreground" />
+              </div>
 
-              const droppedFile =
-                event.dataTransfer.files?.[0];
+              <h2 className="mt-5 text-lg font-semibold tracking-tight">
+                Drop your 60 or 120 FPS MP4 here
+              </h2>
 
-              if (droppedFile) {
-                void inspect(
-                  droppedFile,
-                );
-              }
-            }}
-            className={`m-4 flex min-h-[270px] flex-col items-center justify-center rounded-xl border border-dashed px-6 py-10 text-center transition-colors sm:m-5 ${
-              dragging
-                ? "border-foreground bg-muted/50"
-                : "border-border hover:border-foreground/30"
-            }`}
-          >
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-muted text-[10px] font-bold tracking-tight">
-              MP4
-            </div>
+              <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+                Use the MP4 you exported from Blur or your
+                usual editing workflow. We only change the
+                timing metadata — the video itself is not
+                re-encoded.
+              </p>
 
-            <p className="mt-4 text-sm font-medium">
-              Drop your MP4 here
-            </p>
+              <button
+                type="button"
+                onClick={() =>
+                  inputRef.current?.click()
+                }
+                className="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-85"
+              >
+                Choose MP4
+              </button>
 
-            <p className="mt-1 text-xs text-muted-foreground">
-              60 or 120 FPS
-            </p>
-
-            <label className="mt-5 cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-85">
-              Choose MP4
+              <p className="mt-4 text-xs text-muted-foreground">
+                MP4 only · 60 or 120 FPS
+              </p>
 
               <input
                 ref={inputRef}
                 type="file"
                 accept="video/mp4,.mp4"
                 className="hidden"
-                onChange={(event) => {
+                onChange={(
+                  event,
+                ) => {
                   const selected =
                     event.target.files?.[0];
 
-                  if (selected) {
+                  if (
+                    selected
+                  ) {
                     void inspect(
                       selected,
                     );
                   }
                 }}
               />
-            </label>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <HardDrive className="h-3.5 w-3.5" />
+                Stays on your device
+              </span>
+
+              <span>
+                No re-encoding
+              </span>
+
+              <span>
+                60 / 120 FPS
+              </span>
+            </div>
           </div>
         ) : (
           <div className="p-4 sm:p-5">
-            <div className="rounded-xl border border-border bg-muted/30">
-              <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {file.name}
-                  </p>
+            <div className="overflow-hidden rounded-xl border border-border">
+              <div className="grid md:grid-cols-[280px_1fr]">
+                {/* Thumbnail */}
+                <div className="relative aspect-video overflow-hidden bg-muted md:aspect-auto md:min-h-[230px]">
+                  {thumbnail ? (
+                    <img
+                      src={thumbnail}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
 
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {formatBytes(
-                      file.size,
-                    )}
+                  <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/50 to-transparent" />
 
-                    {fps !== null
-                      ? ` · ${fps.toFixed(
-                          2,
-                        )} FPS`
-                      : ""}
-
-                    {duration !== null
-                      ? ` · ${formatDuration(
-                          duration,
-                        )}`
-                      : ""}
-                  </p>
+                  {fps !== null && (
+                    <div className="absolute bottom-3 left-3 rounded-md bg-black/75 px-2 py-1 text-[11px] font-medium text-white backdrop-blur-sm">
+                      {fps.toFixed(2)} FPS
+                    </div>
+                  )}
                 </div>
 
-                <div className="text-xs text-muted-foreground">
-                  {busy
-                    ? "Processing…"
-                    : error
-                      ? "Error"
-                      : status}
+                {/* File information */}
+                <div className="flex min-w-0 flex-col p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                        Selected video
+                      </p>
+
+                      <h2 className="mt-2 truncate text-base font-semibold">
+                        {file.name}
+                      </h2>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={clearFile}
+                      aria-label="Remove video"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <MetaItem
+                      label="Size"
+                      value={formatBytes(
+                        file.size,
+                      )}
+                    />
+
+                    <MetaItem
+                      label="Frame rate"
+                      value={
+                        fps !== null
+                          ? `${fps.toFixed(
+                              2,
+                            )} FPS`
+                          : "Reading…"
+                      }
+                    />
+
+                    <MetaItem
+                      label="Duration"
+                      value={
+                        duration !== null
+                          ? formatDuration(
+                              duration,
+                            )
+                          : "Reading…"
+                      }
+                    />
+                  </div>
+
+                  <div className="mt-auto pt-6">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {error ? (
+                          <>
+                            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                            {error}
+                          </>
+                        ) : busy ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            {status}
+                          </>
+                        ) : (
+                          <>
+                            <Check className="h-3.5 w-3.5 text-emerald-500" />
+                            {status}
+                          </>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void patch()
+                        }
+                        disabled={
+                          busy ||
+                          fps === null ||
+                          !!error
+                        }
+                        className="inline-flex h-10 items-center justify-center rounded-lg bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {busy
+                          ? "Patching…"
+                          : supportsDirectSave
+                            ? "Patch & Save MP4"
+                            : "Patch & Download MP4"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
+            </div>
 
-              {error && (
-                <div className="border-t border-border px-4 py-3 text-xs text-red-500">
-                  {error}
-                </div>
-              )}
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
+              <span>
+                Client-side processing
+              </span>
 
-              <div className="border-t border-border p-4">
-                <button
-                  type="button"
-                  onClick={() =>
-                    void patch()
-                  }
-                  disabled={
-                    !ready
-                  }
-                  className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {busy
-                    ? "Patching…"
-                    : supportsDirectSave
-                      ? "Patch & Save MP4"
-                      : "Patch & Download MP4"}
-                </button>
-              </div>
+              <span>
+                No re-encoding
+              </span>
+
+              <span>
+                {mdhdCount !== null
+                  ? `${mdhdCount} MP4 timing tracks`
+                  : "MP4 metadata"}
+              </span>
             </div>
           </div>
         )}
-
-        <div className="border-t border-border px-5 py-3">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-            <span>60 / 120 FPS</span>
-            <span aria-hidden="true">•</span>
-            <span>No re-encoding</span>
-            <span aria-hidden="true">•</span>
-            <span>Processed locally</span>
-          </div>
-        </div>
       </section>
+
+      {!file && (
+        <div className="mt-8 grid gap-4 border-t border-border pt-6 sm:grid-cols-3">
+          <SmallFeature
+            number="01"
+            title="Choose your MP4"
+            text="Drop in the 60 or 120 FPS video you want to prepare."
+          />
+
+          <SmallFeature
+            number="02"
+            title="Patch locally"
+            text="Only MP4 timing metadata is changed in your browser."
+          />
+
+          <SmallFeature
+            number="03"
+            title="Save the result"
+            text="Your original video stays untouched while a new MP4 is created."
+          />
+        </div>
+      )}
     </main>
   );
+}
+
+function FilmMark() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect
+        x="4"
+        y="3"
+        width="16"
+        height="18"
+        rx="2"
+      />
+
+      <path d="M8 3v18" />
+      <path d="M16 3v18" />
+      <path d="M4 8h4" />
+      <path d="M16 8h4" />
+      <path d="M4 16h4" />
+      <path d="M16 16h4" />
+
+      <path
+        d="m11 9 4 3-4 3V9Z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </svg>
+  );
+}
+
+function MetaItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+      <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+        {label}
+      </p>
+
+      <p className="mt-1 text-sm font-medium">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SmallFeature({
+  number,
+  title,
+  text,
+}: {
+  number: string;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div>
+      <p className="font-mono text-[11px] text-muted-foreground">
+        {number}
+      </p>
+
+      <p className="mt-2 text-sm font-semibold">
+        {title}
+      </p>
+
+      <p className="mt-1 text-sm leading-5 text-muted-foreground">
+        {text}
+      </p>
+    </div>
+  );
+}
+
+function formatBytes(
+  bytes: number,
+) {
+  const units = [
+    "B",
+    "KB",
+    "MB",
+    "GB",
+    "TB",
+  ];
+
+  let value = bytes;
+  let index = 0;
+
+  while (
+    value >= 1024 &&
+    index <
+      units.length - 1
+  ) {
+    value /= 1024;
+    index++;
+  }
+
+  return `${value.toFixed(
+    value >= 100 ||
+      index === 0
+      ? 0
+      : 2,
+  )} ${units[index]}`;
+}
+
+function formatDuration(
+  seconds: number,
+) {
+  const totalSeconds =
+    Math.max(
+      0,
+      Math.round(seconds),
+    );
+
+  const hours =
+    Math.floor(
+      totalSeconds /
+        3600,
+    );
+
+  const minutes =
+    Math.floor(
+      (totalSeconds %
+        3600) /
+        60,
+    );
+
+  const remainingSeconds =
+    totalSeconds % 60;
+
+  if (hours) {
+    return `${hours}:${String(
+      minutes,
+    ).padStart(
+      2,
+      "0",
+    )}:${String(
+      remainingSeconds,
+    ).padStart(
+      2,
+      "0",
+    )}`;
+  }
+
+  return `${minutes}:${String(
+    remainingSeconds,
+  ).padStart(
+    2,
+    "0",
+  )}`;
 }
