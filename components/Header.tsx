@@ -1,24 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Github, Moon, Sun } from "lucide-react";
 
 export default function Header() {
-  const [dark, setDark] =
-    useState(false);
+  const [dark, setDark] = useState(false);
 
   useEffect(() => {
     setDark(
-      document.documentElement.classList.contains(
-        "dark",
-      ),
+      document.documentElement.classList.contains("dark"),
     );
   }, []);
 
   function toggleTheme() {
-    const nextDark =
-      !dark;
+    const nextDark = !dark;
 
     document.documentElement.classList.toggle(
       "dark",
@@ -27,26 +23,24 @@ export default function Header() {
 
     localStorage.setItem(
       "theme",
-      nextDark
-        ? "dark"
-        : "light",
+      nextDark ? "dark" : "light",
     );
 
-    setDark(
-      nextDark,
-    );
+    setDark(nextDark);
   }
 
   return (
     <header className="border-b border-border bg-background">
-      <div className="mx-auto flex h-14 w-full max-w-4xl items-center justify-between px-5 sm:px-6">
+      <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-5 sm:px-6">
         <Link
           href="/"
-          className="group flex items-center gap-3"
-          aria-label="TikTok FPS Patcher"
+          className="flex items-center gap-3"
+          aria-label="TikTok FPS Patcher home"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-transform group-hover:scale-[1.03]">
-            <FilmMark />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-foreground text-background">
+            <span className="text-[10px] font-bold tracking-tight">
+              TF
+            </span>
           </div>
 
           <div className="leading-none">
@@ -65,16 +59,20 @@ export default function Header() {
             href="https://github.com/realbay/tiktok-fps-patcher"
             target="_blank"
             rel="noreferrer"
-            className="rounded-md px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            GitHub
+            <Github className="h-4 w-4" />
+
+            <span className="hidden sm:inline">
+              GitHub
+            </span>
           </a>
 
           <button
             type="button"
             onClick={toggleTheme}
             aria-label="Toggle theme"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             {dark ? (
               <Moon className="h-4 w-4" />
@@ -85,41 +83,5 @@ export default function Header() {
         </div>
       </div>
     </header>
-  );
-}
-
-function FilmMark() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect
-        x="4"
-        y="3"
-        width="16"
-        height="18"
-        rx="2"
-      />
-
-      <path d="M8 3v18" />
-      <path d="M16 3v18" />
-      <path d="M4 8h4" />
-      <path d="M16 8h4" />
-      <path d="M4 16h4" />
-      <path d="M16 16h4" />
-
-      <path
-        d="m11 9 4 3-4 3V9Z"
-        fill="currentColor"
-        stroke="none"
-      />
-    </svg>
   );
 }
