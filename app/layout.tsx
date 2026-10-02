@@ -1,22 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist } from "next/font/google";
 import Header from "@/components/Header";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const geist = Geist({
+  variable: "--font-geist",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
   title: "TikTok FPS Patcher",
   description:
-    "Patch 60 and 120 FPS MP4 timing metadata directly in your browser.",
+    "Patch 60/120 FPS MP4 timing metadata locally in your browser.",
 };
 
 export default function RootLayout({
@@ -28,22 +23,41 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}})();`,
+            __html: `
+              (function () {
+                try {
+                  var theme = localStorage.getItem("theme");
+
+                  if (
+                    theme === "dark" ||
+                    (
+                      !theme &&
+                      window.matchMedia(
+                        "(prefers-color-scheme: dark)"
+                      ).matches
+                    )
+                  ) {
+                    document.documentElement.classList.add("dark");
+                  }
+                } catch (e) {}
+              })();
+            `,
           }}
         />
       </head>
 
-      <body className="flex min-h-full flex-col bg-background text-foreground">
+      <body
+        className={`${geist.variable} min-h-screen bg-[#111214] text-[#f2f3f5] antialiased`}
+      >
         <Header />
 
-        <main className="flex-1">
+        <div className="min-h-[calc(100vh-64px)]">
           {children}
-        </main>
+        </div>
       </body>
     </html>
   );
