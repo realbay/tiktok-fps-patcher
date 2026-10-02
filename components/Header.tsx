@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Github, Moon, Sun } from "lucide-react";
 
 export default function Header() {
   const [dark, setDark] =
@@ -17,7 +17,8 @@ export default function Header() {
   }, []);
 
   function toggleTheme() {
-    const nextDark = !dark;
+    const nextDark =
+      !dark;
 
     document.documentElement.classList.toggle(
       "dark",
@@ -31,25 +32,29 @@ export default function Header() {
         : "light",
     );
 
-    setDark(nextDark);
+    setDark(
+      nextDark,
+    );
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-5 sm:px-6">
+    <header className="border-b border-border bg-background">
+      <div className="mx-auto flex h-14 w-full max-w-4xl items-center justify-between px-5 sm:px-6">
         <Link
           href="/"
-          aria-label="TikTok FPS Patcher home"
-          className="flex items-center gap-3"
+          className="group flex items-center gap-3"
+          aria-label="TikTok FPS Patcher"
         >
-          <AppLogo />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-transform group-hover:scale-[1.03]">
+            <FilmMark />
+          </div>
 
           <div className="leading-none">
             <div className="text-sm font-semibold tracking-tight">
               TikTok FPS Patcher
             </div>
 
-            <div className="mt-1 text-[10px] text-muted-foreground">
+            <div className="mt-1 text-[11px] text-muted-foreground">
               MP4 metadata utility
             </div>
           </div>
@@ -60,21 +65,16 @@ export default function Header() {
             href="https://github.com/realbay/tiktok-fps-patcher"
             target="_blank"
             rel="noreferrer"
-            aria-label="GitHub repository"
-            className="flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="rounded-md px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <Github className="h-4 w-4" />
-
-            <span className="hidden sm:inline">
-              GitHub
-            </span>
+            GitHub
           </a>
 
           <button
             type="button"
             onClick={toggleTheme}
             aria-label="Toggle theme"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             {dark ? (
               <Moon className="h-4 w-4" />
@@ -88,61 +88,38 @@ export default function Header() {
   );
 }
 
-function AppLogo() {
+function FilmMark() {
   return (
-    <div
-      className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-foreground text-background shadow-sm"
+    <svg
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       aria-hidden="true"
     >
-      <svg
-        viewBox="0 0 32 32"
-        className="h-8 w-8"
-        fill="none"
-      >
-        <rect
-          x="7"
-          y="7"
-          width="18"
-          height="18"
-          rx="4"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          opacity="0.35"
-        />
+      <rect
+        x="4"
+        y="3"
+        width="16"
+        height="18"
+        rx="2"
+      />
 
-        <path
-          d="M11 11.5h10"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
+      <path d="M8 3v18" />
+      <path d="M16 3v18" />
+      <path d="M4 8h4" />
+      <path d="M16 8h4" />
+      <path d="M4 16h4" />
+      <path d="M16 16h4" />
 
-        <path
-          d="M11 16h7"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-
-        <path
-          d="M11 20.5h4"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-
-        <path
-          d="M21.5 14.5v6"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          opacity="0.8"
-        />
-      </svg>
-
-      <span className="sr-only">
-        TF
-      </span>
-    </div>
+      <path
+        d="m11 9 4 3-4 3V9Z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </svg>
   );
 }
