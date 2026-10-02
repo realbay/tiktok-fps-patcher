@@ -3,20 +3,25 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Header from "@/components/Header";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const geistSans =
+  Geist({
+    variable:
+      "--font-geist-sans",
+    subsets: ["latin"],
+  });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const geistMono =
+  Geist_Mono({
+    variable:
+      "--font-geist-mono",
+    subsets: ["latin"],
+  });
 
 export const metadata: Metadata = {
-  title: "TikTok FPS Patcher",
+  title:
+    "TikTok FPS Patcher",
   description:
-    "Patch MP4 timing metadata locally without re-encoding.",
+    "Patch 60 and 120 FPS MP4 timing metadata locally in your browser.",
 };
 
 export default function RootLayout({
@@ -33,25 +38,8 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `
-              (function () {
-                try {
-                  var t = localStorage.getItem("theme");
-
-                  if (
-                    t === "dark" ||
-                    (
-                      !t &&
-                      window.matchMedia(
-                        "(prefers-color-scheme: dark)"
-                      ).matches
-                    )
-                  ) {
-                    document.documentElement.classList.add("dark");
-                  }
-                } catch (e) {}
-              })();
-            `,
+            __html:
+              `(function(){try{var t=localStorage.getItem("theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}})();`,
           }}
         />
       </head>
